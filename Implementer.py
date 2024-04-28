@@ -54,7 +54,7 @@ mlirrunner_opts = [
 
 objdump_bin = "objdump"
 
-objdump_opts = ["-d", "--visualize-jumps"]
+objdump_opts = ["-d", "--no-addresses", "--no-show-raw-insn", "--visualize-jumps"]
 
 objdump_color_opts = [
     "--visualize-jumps=color",
