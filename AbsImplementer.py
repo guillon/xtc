@@ -181,6 +181,12 @@ class AbsImplementer(ABC):
         input_pipe=None,
         pipe_stdoutput=True,
     ):
+        pretty_cmd = "| " if input_pipe else ""
+        pretty_cmd += " ".join(cmd)
+        self.cmds_history.append(pretty_cmd)
+        if debug:
+            print(f"> exec: {pretty_cmd}", file=sys.stderr)
+
         if input_pipe and pipe_stdoutput:
             result = subprocess.run(
                 cmd, input=input_pipe, stdout=subprocess.PIPE, text=True
@@ -191,12 +197,6 @@ class AbsImplementer(ABC):
             result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
         else:
             result = subprocess.run(cmd, text=True)
-
-        pretty_cmd = "| " if input_pipe else ""
-        pretty_cmd += " ".join(cmd)
-        self.cmds_history.append(pretty_cmd)
-        if debug:
-            print(f"> exec: {pretty_cmd}", file=sys.stderr)
 
         return result
 
@@ -211,7 +211,7 @@ class AbsImplementer(ABC):
         dump_file=dump_file,
         debug=False,
     ):
-        exe_dump_file = f"{dump_file}.out"
+        exe_dump_file = f"{dump_file}.o"
 
         str_module = self.glue()
 
@@ -226,7 +226,7 @@ class AbsImplementer(ABC):
         )
 
         run_extra_opts = self.build_run_extra_opts(
-            exe_file=dump_file, print_assembly=print_assembly, color=color
+            exe_file=exe_dump_file, print_assembly=print_assembly, color=color
         )
         cmd_run = self.cmd_run_mlir + run_extra_opts
         result = self.execute_command(
@@ -235,7 +235,7 @@ class AbsImplementer(ABC):
 
         if print_assembly:
             disassemble_process = self.disassemble(
-                obj_file=dump_file,
+                obj_file=exe_dump_file,
                 color=color,
                 debug=debug,
             )
@@ -265,7 +265,7 @@ class AbsImplementer(ABC):
     ):
         ir_dump_file = f"{dump_file}.ir"
         bc_dump_file = f"{dump_file}.bc"
-        exe_dump_file = f"{dump_file}.out"
+        exe_dump_file = f"{dump_file}.o"
 
         str_module = self.glue()
 
