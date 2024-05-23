@@ -3,6 +3,7 @@
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
 from abc import abstractmethod
+import numpy as np
 from xdsl.ir import Operation
 from AbsImplementer import AbsImplementer
 import transform
@@ -227,6 +228,30 @@ class PerfectlyNestedImplementer(AbsImplementer):
         for nv in nvect:
             self.vectorization.append(nv)
             self.unrolling.pop(nv)
+
+    @classmethod
+    def _np_types_spec(cls, types):
+        types_map = {"f32": "float32", "f64": "float64"}
+        types_spec = [
+            {
+                "shape": t.get_shape(),
+                "dtype": types_map[str(t.get_element_type())],
+            }
+            for t in types
+        ]
+        return types_spec
+
+    def np_inputs_spec(self):
+        return self._np_types_spec([i.type for i in self.source_op.inputs])
+
+    def np_outputs_spec(self):
+        return self._np_types_spec([i.type for i in self.source_op.outputs])
+
+    def reference_impl(self, *operands):
+        if self.source_op.name == "linalg.matmul":
+            np.matmul(operands[0], operands[1], out=operands[2])
+        else:
+            assert 0, f"unknown implementation for operation: {self.source_op.name}"
 
     @abstractmethod
     def payload(self, m, elt_type):
