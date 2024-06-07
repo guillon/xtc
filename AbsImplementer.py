@@ -116,6 +116,7 @@ class AbsImplementer(ABC):
             payload_name if payload_name else f"payload{AbsImplementer.count}"
         )
         self.init_payload_name = f"init_{self.payload_name}"
+        self.op_id_attribute = f"id{AbsImplementer.count}"
         AbsImplementer.count += 1
         #
         self.mliropt = [f"{mlir_install_dir}/bin/mlir-opt"]
