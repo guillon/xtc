@@ -33,11 +33,12 @@ from xdsl.ir import Region as xdslRegion
 from xdsl.dialects import func as xdslfunc
 
 from AbsImplementer import AbsImplementer
-from PerfectlyNestedImplementer import PerfectlyNestedImplementer
 import transform
 
 
 class MlirImplementer(AbsImplementer):
+    count = 0
+
     def __init__(
         self,
         mlir_install_dir: str,
@@ -46,9 +47,17 @@ class MlirImplementer(AbsImplementer):
         parallel_dims: list[str],
         reduction_dims: list[str],
         vectors_size=16,
+        payload_name=None,
     ):
         super().__init__(mlir_install_dir, vectors_size)
-
+        #
+        self.payload_name = (
+            payload_name if payload_name else f"payload{MlirImplementer.count}"
+        )
+        self.init_payload_name = f"init_{self.payload_name}"
+        self.op_id_attribute = f"id{MlirImplementer.count}"
+        MlirImplementer.count += 1
+        #
         self.source_op = source_op
         self.source_op.attributes[self.op_id_attribute] = xdslUnitAttr()
         if str(source_op.operands[0].type.get_element_type()) == "f32":
@@ -63,7 +72,7 @@ class MlirImplementer(AbsImplementer):
             MemRefType.parse(str(i.type), context=self.ctx)
             for i in self.source_op.outputs
         ]
-
+        #
         self.dims = dims
         self.parallel_dims = parallel_dims
         self.reduction_dims = reduction_dims

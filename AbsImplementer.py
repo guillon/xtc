@@ -93,13 +93,10 @@ objdump_color_opts = [
 
 
 class AbsImplementer(ABC):
-    count = 0
-
     def __init__(
         self,
         mlir_install_dir: str,
         vectors_size: int,
-        payload_name=None,
     ):
         self.ctx = Context()
         self.loc = Location.unknown(self.ctx)
@@ -109,13 +106,6 @@ class AbsImplementer(ABC):
         )
         #
         self.vectors_size = vectors_size
-        #
-        self.payload_name = (
-            payload_name if payload_name else f"payload{AbsImplementer.count}"
-        )
-        self.init_payload_name = f"init_{self.payload_name}"
-        self.op_id_attribute = f"id{AbsImplementer.count}"
-        AbsImplementer.count += 1
         #
         self.shared_libs = [f"{mlir_install_dir}/lib/{lib}" for lib in runtime_libs]
         self.cmd_run_mlir = [
@@ -139,11 +129,7 @@ class AbsImplementer(ABC):
                 [f"-Wl,--rpath={os.path.dirname(lib)}" for lib in self.shared_libs]
             )
         )
-        #
-        self.cmd_disassembler = (
-            [objdump_bin] + objdump_opts + [f"--disassemble={self.payload_name}"]
-        )
-        #
+
         self.cmds_history = []
 
     def build_disassemble_extra_opts(self, obj_file, color):
@@ -197,7 +183,12 @@ class AbsImplementer(ABC):
         disassemble_extra_opts = self.build_disassemble_extra_opts(
             obj_file=obj_file, color=color
         )
-        disassemble_cmd = self.cmd_disassembler + disassemble_extra_opts
+        disassemble_cmd = (
+            [objdump_bin]
+            + objdump_opts
+            + [f"--disassemble={self.payload_name}"]
+            + disassemble_extra_opts
+        )
         bc_process = self.execute_command(
             cmd=disassemble_cmd, pipe_stdoutput=False, debug=debug
         )
