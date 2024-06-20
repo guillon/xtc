@@ -163,12 +163,15 @@ class Scheduler:
 
 class Implementer:
     def __init__(
-        self, source_op: Operation, dims: dict[str, int], parallel_dims: list[str]
+        self,
+        source_op: Operation,
+        dims: dict[str, int],
+        parallel_dims: list[str],
     ):
         self.op = source_op
         self.dims = dims
         self.parallel_dims = parallel_dims
-        self.payload_name = self.op.operator.name
+        self.payload_name = self.op.name
 
     def get_scheduler(self) -> Scheduler:
         return Scheduler(self)

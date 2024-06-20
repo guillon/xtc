@@ -48,13 +48,18 @@ def get_tvm_native_target_options() -> str:
 
 
 class Operation:
-    def __init__(self, operator, args):
+    def __init__(self, operator, args, name=None, target=None):
         self.operator = operator
         self.args = args
-        self.target_options = get_tvm_native_target_options()
-        self.target = "llvm"
+        if target is not None:
+            self.target_options = ""
+            self.target = target
+        else:
+            self.target_options = get_tvm_native_target_options()
+            self.target = "llvm"
         self.tgt = tvm.target.Target(target=f"{self.target} {self.target_options}")
         self.dev = tvm.device(self.tgt.kind.name, 0)
+        self.name = self.operator.name if name is None else name
 
     def generate(self) -> tuple:
         return self.operator.generate_op(*self.args)
@@ -66,7 +71,7 @@ class Operation:
         return sch
 
     def build(self, operation: tuple, sch: Any) -> Any:
-        return tvm.build(sch, operation, self.tgt, name=self.operator.name)
+        return tvm.build(sch, operation, self.tgt, name=self.name)
 
     def lower(self, operation: tuple, sch: Any) -> str:
         return tvm.lower(sch, operation, simple_mode=True)
