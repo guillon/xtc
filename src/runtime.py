@@ -88,7 +88,7 @@ def compile_runtime(out_dll):
     debug = False  # True for verbose
     debug_opts = ["-DRUNTIME_DEBUG=1"] if debug else []
     files = ["evaluate.c", "cndarray.c", "alloc.c"]
-    src_dir = f"{os.path.dirname(__file__)}/src"
+    src_dir = f"{os.path.dirname(__file__)}/ctools"
     src_files = [f"{src_dir}/{file}" for file in files]
     cmd = [
         "cc",

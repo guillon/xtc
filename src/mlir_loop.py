@@ -1,7 +1,9 @@
+#! venv/bin/python3
 #
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
+
 import argparse
 import os
 from xdsl.dialects import func, linalg
@@ -179,7 +181,3 @@ def main():
             color=args.color,
             debug=args.debug,
         )
-
-
-if __name__ == "__main__":
-    main()
