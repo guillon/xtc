@@ -22,6 +22,7 @@ class MlirGraphImplementer(MlirImplementer):
         nodes: list[MlirNodeImplementer],
         concluding_passes: list[str] = [],
         always_vectorize: bool = True,
+        no_alias: bool = False,
     ):
         self.nodes: dict[str, MlirNodeImplementer] = {}
         for impl in nodes:
@@ -33,6 +34,7 @@ class MlirGraphImplementer(MlirImplementer):
             xdsl_func=xdsl_func,
             always_vectorize=always_vectorize,
             concluding_passes=concluding_passes,
+            no_alias=no_alias,
         )
 
     @override

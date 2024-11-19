@@ -38,6 +38,7 @@ class MlirNodeImplementer(MlirImplementer):
         concluding_passes: list[str] = [],
         loop_stamps: list[str] = [],
         always_vectorize: bool = True,
+        no_alias: bool = False,
     ):
         # Build the payload
         self.op_id_attribute = f"id{MlirNodeImplementer.count}"
@@ -50,6 +51,7 @@ class MlirNodeImplementer(MlirImplementer):
             xdsl_func=xdsl_func,
             concluding_passes=concluding_passes,
             always_vectorize=always_vectorize,
+            no_alias=no_alias,
         )
         # Used for validation
         self.source_op = source_op
