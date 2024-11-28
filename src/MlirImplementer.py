@@ -16,7 +16,6 @@ from mlir.dialects.transform import (
     get_parent_op,
 )
 
-from xdsl_aux import brand_inputs_with_noalias
 from MlirModule import MlirModule
 
 
@@ -28,10 +27,8 @@ class MlirImplementer(MlirModule, ABC):
         no_alias: bool,
         concluding_passes: list[str],
     ):
-        if no_alias:
-            brand_inputs_with_noalias(xdsl_func)
         #
-        super().__init__(xdsl_func)
+        super().__init__(xdsl_func, no_alias)
         #
         self.always_vectorize = always_vectorize
         self.concluding_passes = concluding_passes
