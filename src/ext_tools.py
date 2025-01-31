@@ -59,13 +59,7 @@ objdump_bin = "objdump"
 
 cc_bin = "cc"
 
-objdump_opts = [
-    "-dr",
-    "-Mintel",
-    "--no-addresses",
-    "--no-show-raw-insn",
-    "--visualize-jumps",
-]
+objdump_opts = ["-dr", "--no-addresses", "--no-show-raw-insn", "--visualize-jumps"]
 
 objdump_color_opts = [
     "--visualize-jumps=color",
