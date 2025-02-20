@@ -151,7 +151,9 @@ class Implementer:
         min_repeat_ms=0,
         number=1,
         validate=False,
+        init_zero=False,
         parameters=None,
+        reference=None,
     ):
         results, code, error = self.load_and_eval(
             dll,
@@ -160,7 +162,9 @@ class Implementer:
             min_repeat_ms=min_repeat_ms,
             number=number,
             validate=validate,
+            init_zero=init_zero,
             parameters=parameters,
+            reference=reference,
         )
         if code == 0:
             return min(results)
@@ -175,7 +179,9 @@ class Implementer:
         min_repeat_ms=0,
         number=1,
         validate=False,
+        init_zero=False,
         parameters=None,
+        reference=None,
     ):
         results, code, error = self.op.run_eval_dll(
             dll,
@@ -184,7 +190,9 @@ class Implementer:
             number=number,
             min_repeat_ms=min_repeat_ms,
             validate=validate,
+            init_zero=init_zero,
             parameters=parameters,
+            reference=reference,
         )
         return results, code, error
 
