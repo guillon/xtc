@@ -233,7 +233,7 @@ def tile_strategy_3d(impl, op_args, in_x):
     parallel_axes = None
     if THREADS > 1:
         parallel_axes = axes_order[:1]
-    unroll_axes = {"k1": tiles_k[0], "i1": tiles_i[0]}
+    unroll_axes = {"j1": tiles_j[0], "k1": tiles_k[0], "i1": tiles_i[0]}
     logger.debug(
         "input: %s: tile i: %s, j: %s, k: %s, order: %s, vector: %s, parallel: %s, unroll: %s",
         in_x,
@@ -293,10 +293,7 @@ def tile_strategy_4d(impl, op_args, in_x):
         parallel_axes = [axes_order[0]] if axes_order[0] in ["i", "j"] else None
         if parallel_axes is not None:
             parallel_axes += [axes_order[1]] if axes_order[1] in ["i", "j"] else []
-    unroll_axes = {
-        axis: tiles[axis]
-        for axis in (permutations if vector_axes is None else permutations[:-1])[::-1]
-    }
+    unroll_axes = {axis: tiles[axis] for axis in permutations[::-1]}
     logger.debug(
         "input: %s: tiles: %s, order: %s, vector: %s, parallel: %s, unroll: %s",
         in_x,
@@ -362,7 +359,7 @@ def tile_strategy_7d(impl, op_args, in_x):
     parallel_axes = None
     if THREADS > 1:
         parallel_axes = axes_order[:2]
-    unroll_axes = {"i3": tiles_i[-1], "k1": tiles_k[-1]}
+    unroll_axes = {"j3": tiles_j[-1], "i3": tiles_i[-1], "k1": tiles_k[-1]}
     logger.debug(
         "input: %s: tile i: %s, j: %s, k: %s, order: %s, vector: %s, parallel: %s, unroll: %s",
         in_x,
