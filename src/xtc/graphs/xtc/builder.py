@@ -4,15 +4,14 @@
 #
 from typing import Any
 
-from xtc.itf.graph import Graph
-
+from .graph import XTCGraph
 from .context import XTCGraphContext
 
 
 class graph_builder:
     def __init__(self, **graph_kwargs: Any) -> None:
         self._graph_kwargs = graph_kwargs
-        self._graph: Graph | None = None
+        self._graph: XTCGraph | None = None
 
     def __enter__(self) -> "graph_builder":
         XTCGraphContext.push(**self._graph_kwargs)
@@ -23,6 +22,6 @@ class graph_builder:
         self._graph = scope.graph
 
     @property
-    def graph(self) -> Graph:
+    def graph(self) -> XTCGraph:
         assert self._graph is not None, "can't get graph inside builder context"
         return self._graph
