@@ -3,4 +3,4 @@
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
 from .builder import graph_builder as graph
-from .operations import *
+from .op_factory import *
