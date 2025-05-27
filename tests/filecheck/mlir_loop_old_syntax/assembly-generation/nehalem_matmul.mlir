@@ -1,4 +1,4 @@
-// RUN: mlir-loop --old-syntax %s --no-alias --always-vectorize --arch x86-64 --cpu nehalem --print-assembly --hide-jumps 2>&1 | filecheck %s
+// RUN: mlir-loop --old-syntax %s --no-alias --arch x86-64 --cpu nehalem --print-assembly --hide-jumps 2>&1 | filecheck %s
 
 func.func @myfun(
   %A: memref<256x512xf32>,
@@ -45,17 +45,17 @@ func.func @myfun(
 // CHECK-NEXT:  	mov    %r14,%rcx
 // CHECK-NEXT:  	xor    %edx,%edx
 // CHECK-NEXT:  	nop
-// CHECK-NEXT:  	movups (%rax,%rdx,4),%xmm0
-// CHECK-NEXT:  	movups 0x10(%rax,%rdx,4),%xmm4
-// CHECK-NEXT:  	movups 0x20(%rax,%rdx,4),%xmm3
-// CHECK-NEXT:  	movups 0x30(%rax,%rdx,4),%xmm1
+// CHECK-NEXT:  	movups (%rax,%rdx,4),%xmm1
+// CHECK-NEXT:  	movups 0x10(%rax,%rdx,4),%xmm3
+// CHECK-NEXT:  	movups 0x20(%rax,%rdx,4),%xmm4
+// CHECK-NEXT:  	movups 0x30(%rax,%rdx,4),%xmm0
 // CHECK-NEXT:  	mov    $0xfffffffffffffffc,%rsi
 // CHECK-NEXT:  	mov    %rcx,%rdi
 // CHECK-NEXT:  	nopl   (%rax)
-// CHECK-NEXT:  	movups -0xc00(%rdi),%xmm6
-// CHECK-NEXT:  	movups -0xbf0(%rdi),%xmm7
-// CHECK-NEXT:  	movups -0xbe0(%rdi),%xmm8
-// CHECK-NEXT:  	movups -0xbd0(%rdi),%xmm9
+// CHECK-NEXT:  	movups -0xc00(%rdi),%xmm9
+// CHECK-NEXT:  	movups -0xbf0(%rdi),%xmm8
+// CHECK-NEXT:  	movups -0xbe0(%rdi),%xmm7
+// CHECK-NEXT:  	movups -0xbd0(%rdi),%xmm6
 // CHECK-NEXT:  	movss  0x4(%r15,%rsi,4),%xmm10
 // CHECK-NEXT:  	movss  0x8(%r15,%rsi,4),%xmm5
 // CHECK-NEXT:  	movss  0xc(%r15,%rsi,4),%xmm2
@@ -69,10 +69,10 @@ func.func @myfun(
 // CHECK-NEXT:  	addps  %xmm3,%xmm8
 // CHECK-NEXT:  	mulps  %xmm9,%xmm10
 // CHECK-NEXT:  	addps  %xmm1,%xmm10
-// CHECK-NEXT:  	movups -0x800(%rdi),%xmm9
-// CHECK-NEXT:  	movups -0x7f0(%rdi),%xmm4
-// CHECK-NEXT:  	movups -0x7e0(%rdi),%xmm3
-// CHECK-NEXT:  	movups -0x7d0(%rdi),%xmm1
+// CHECK-NEXT:  	movups -0x7d0(%rdi),%xmm9
+// CHECK-NEXT:  	movups -0x7e0(%rdi),%xmm4
+// CHECK-NEXT:  	movups -0x7f0(%rdi),%xmm3
+// CHECK-NEXT:  	movups -0x800(%rdi),%xmm1
 // CHECK-NEXT:  	shufps $0x0,%xmm5,%xmm5
 // CHECK-NEXT:  	mulps  %xmm5,%xmm1
 // CHECK-NEXT:  	addps  %xmm10,%xmm1
@@ -82,10 +82,10 @@ func.func @myfun(
 // CHECK-NEXT:  	addps  %xmm7,%xmm4
 // CHECK-NEXT:  	mulps  %xmm9,%xmm5
 // CHECK-NEXT:  	addps  %xmm6,%xmm5
-// CHECK-NEXT:  	movups -0x3d0(%rdi),%xmm9
-// CHECK-NEXT:  	movups -0x3e0(%rdi),%xmm8
-// CHECK-NEXT:  	movups -0x3f0(%rdi),%xmm7
-// CHECK-NEXT:  	movups -0x400(%rdi),%xmm6
+// CHECK-NEXT:  	movups -0x400(%rdi),%xmm9
+// CHECK-NEXT:  	movups -0x3f0(%rdi),%xmm8
+// CHECK-NEXT:  	movups -0x3e0(%rdi),%xmm7
+// CHECK-NEXT:  	movups -0x3d0(%rdi),%xmm6
 // CHECK-NEXT:  	shufps $0x0,%xmm2,%xmm2
 // CHECK-NEXT:  	mulps  %xmm2,%xmm6
 // CHECK-NEXT:  	addps  %xmm5,%xmm6
@@ -95,10 +95,10 @@ func.func @myfun(
 // CHECK-NEXT:  	addps  %xmm3,%xmm8
 // CHECK-NEXT:  	mulps  %xmm9,%xmm2
 // CHECK-NEXT:  	addps  %xmm1,%xmm2
-// CHECK-NEXT:  	movups (%rdi),%xmm5
-// CHECK-NEXT:  	movups 0x10(%rdi),%xmm4
-// CHECK-NEXT:  	movups 0x20(%rdi),%xmm3
-// CHECK-NEXT:  	movups 0x30(%rdi),%xmm1
+// CHECK-NEXT:  	movups 0x30(%rdi),%xmm5
+// CHECK-NEXT:  	movups 0x20(%rdi),%xmm4
+// CHECK-NEXT:  	movups 0x10(%rdi),%xmm3
+// CHECK-NEXT:  	movups (%rdi),%xmm1
 // CHECK-NEXT:  	shufps $0x0,%xmm0,%xmm0
 // CHECK-NEXT:  	mulps  %xmm0,%xmm1
 // CHECK-NEXT:  	addps  %xmm2,%xmm1
@@ -112,10 +112,10 @@ func.func @myfun(
 // CHECK-NEXT:  	add    $0x1000,%rdi
 // CHECK-NEXT:  	cmp    $0x1fc,%rsi
 // CHECK-NEXT:  	jb     <myfun+0x60>
-// CHECK-NEXT:  	movups %xmm0,(%rax,%rdx,4)
-// CHECK-NEXT:  	movups %xmm4,0x10(%rax,%rdx,4)
-// CHECK-NEXT:  	movups %xmm3,0x20(%rax,%rdx,4)
-// CHECK-NEXT:  	movups %xmm1,0x30(%rax,%rdx,4)
+// CHECK-NEXT:  	movups %xmm1,(%rax,%rdx,4)
+// CHECK-NEXT:  	movups %xmm3,0x10(%rax,%rdx,4)
+// CHECK-NEXT:  	movups %xmm4,0x20(%rax,%rdx,4)
+// CHECK-NEXT:  	movups %xmm0,0x30(%rax,%rdx,4)
 // CHECK-NEXT:  	lea    0x10(%rdx),%rsi
 // CHECK-NEXT:  	add    $0x40,%rcx
 // CHECK-NEXT:  	cmp    $0xf0,%rdx

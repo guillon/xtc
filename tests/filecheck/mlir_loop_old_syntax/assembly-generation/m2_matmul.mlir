@@ -40,50 +40,45 @@ func.func @myfun(
 // CHECK-NEXT:  	ldp	q1, q0, [x13, #32]
 // CHECK-NEXT:  	ldp	q3, q2, [x13]
 // CHECK-NEXT:  	mov	x14, #0xfffffffffffffffc    	// #-4
-// CHECK-NEXT:  	mov	x15, x8
-// CHECK-NEXT:  	mov	x16, x12
-// CHECK-NEXT:  	ldur	s4, [x15, #-8]
-// CHECK-NEXT:  	prfm	pldl1keep, [x16, #12288]
-// CHECK-NEXT:  	ldp	q6, q5, [x16]
-// CHECK-NEXT:  	ldp	q7, q16, [x16, #32]
-// CHECK-NEXT:  	fmla	v0.4s, v16.4s, v4.s[0]
-// CHECK-NEXT:  	fmla	v3.4s, v6.4s, v4.s[0]
-// CHECK-NEXT:  	fmla	v2.4s, v5.4s, v4.s[0]
-// CHECK-NEXT:  	fmla	v1.4s, v7.4s, v4.s[0]
-// CHECK-NEXT:  	ldur	s4, [x15, #-4]
-// CHECK-NEXT:  	prfm	pldl1keep, [x16, #13312]
-// CHECK-NEXT:  	ldr	q5, [x16, #1072]
-// CHECK-NEXT:  	ldr	q6, [x16, #1024]
-// CHECK-NEXT:  	ldr	q7, [x16, #1040]
-// CHECK-NEXT:  	ldr	q16, [x16, #1056]
-// CHECK-NEXT:  	fmla	v1.4s, v16.4s, v4.s[0]
-// CHECK-NEXT:  	fmla	v2.4s, v7.4s, v4.s[0]
-// CHECK-NEXT:  	fmla	v3.4s, v6.4s, v4.s[0]
-// CHECK-NEXT:  	fmla	v0.4s, v5.4s, v4.s[0]
-// CHECK-NEXT:  	prfm	pldl1keep, [x16, #14336]
-// CHECK-NEXT:  	ldr	q4, [x16, #2080]
-// CHECK-NEXT:  	ldr	q5, [x16, #2064]
-// CHECK-NEXT:  	ldr	q6, [x16, #2048]
-// CHECK-NEXT:  	ldr	q7, [x16, #2096]
-// CHECK-NEXT:  	mov	x17, x15
-// CHECK-NEXT:  	ld1r	{v16.4s}, [x17], #4
-// CHECK-NEXT:  	fmla	v0.4s, v7.4s, v16.4s
-// CHECK-NEXT:  	fmla	v3.4s, v6.4s, v16.4s
-// CHECK-NEXT:  	fmla	v2.4s, v5.4s, v16.4s
-// CHECK-NEXT:  	fmla	v1.4s, v4.4s, v16.4s
+// CHECK-NEXT:  	mov	x15, x12
+// CHECK-NEXT:  	mov	x16, x8
+// CHECK-NEXT:  	ldp	q4, q5, [x15]
+// CHECK-NEXT:  	ldp	q6, q7, [x15, #32]
+// CHECK-NEXT:  	ldp	s16, s17, [x16, #-8]
+// CHECK-NEXT:  	fmla	v3.4s, v4.4s, v16.s[0]
+// CHECK-NEXT:  	fmla	v2.4s, v5.4s, v16.s[0]
+// CHECK-NEXT:  	fmla	v1.4s, v6.4s, v16.s[0]
+// CHECK-NEXT:  	fmla	v0.4s, v7.4s, v16.s[0]
+// CHECK-NEXT:  	ldr	q4, [x15, #1072]
+// CHECK-NEXT:  	ldr	q5, [x15, #1056]
+// CHECK-NEXT:  	ldr	q6, [x15, #1040]
+// CHECK-NEXT:  	ldr	q7, [x15, #1024]
+// CHECK-NEXT:  	fmla	v0.4s, v4.4s, v17.s[0]
+// CHECK-NEXT:  	fmla	v1.4s, v5.4s, v17.s[0]
+// CHECK-NEXT:  	fmla	v2.4s, v6.4s, v17.s[0]
+// CHECK-NEXT:  	ldr	q4, [x15, #2048]
+// CHECK-NEXT:  	ldr	q5, [x15, #2064]
+// CHECK-NEXT:  	ldr	q6, [x15, #2080]
+// CHECK-NEXT:  	ldr	q16, [x15, #2096]
+// CHECK-NEXT:  	mov	x17, x16
+// CHECK-NEXT:  	ld1r	{v18.4s}, [x17], #4
+// CHECK-NEXT:  	fmla	v3.4s, v7.4s, v17.s[0]
+// CHECK-NEXT:  	fmla	v3.4s, v18.4s, v4.4s
+// CHECK-NEXT:  	fmla	v2.4s, v18.4s, v5.4s
+// CHECK-NEXT:  	fmla	v1.4s, v18.4s, v6.4s
+// CHECK-NEXT:  	fmla	v0.4s, v18.4s, v16.4s
 // CHECK-NEXT:  	ldr	s4, [x17]
-// CHECK-NEXT:  	prfm	pldl1keep, [x16, #15360]
-// CHECK-NEXT:  	ldr	q5, [x16, #3120]
-// CHECK-NEXT:  	ldr	q6, [x16, #3072]
-// CHECK-NEXT:  	ldr	q7, [x16, #3088]
-// CHECK-NEXT:  	ldr	q16, [x16, #3104]
-// CHECK-NEXT:  	fmla	v1.4s, v16.4s, v4.s[0]
-// CHECK-NEXT:  	fmla	v2.4s, v7.4s, v4.s[0]
-// CHECK-NEXT:  	fmla	v3.4s, v6.4s, v4.s[0]
+// CHECK-NEXT:  	ldr	q5, [x15, #3120]
+// CHECK-NEXT:  	ldr	q6, [x15, #3104]
+// CHECK-NEXT:  	ldr	q7, [x15, #3088]
+// CHECK-NEXT:  	ldr	q16, [x15, #3072]
 // CHECK-NEXT:  	fmla	v0.4s, v5.4s, v4.s[0]
-// CHECK-NEXT:  	add	x16, x16, #0x1, lsl #12
-// CHECK-NEXT:  	add	x15, x15, #0x10
+// CHECK-NEXT:  	fmla	v1.4s, v6.4s, v4.s[0]
+// CHECK-NEXT:  	fmla	v2.4s, v7.4s, v4.s[0]
+// CHECK-NEXT:  	fmla	v3.4s, v16.4s, v4.s[0]
 // CHECK-NEXT:  	add	x14, x14, #0x4
+// CHECK-NEXT:  	add	x16, x16, #0x10
+// CHECK-NEXT:  	add	x15, x15, #0x1, lsl #12
 // CHECK-NEXT:  	cmp	x14, #0x1fc
 // CHECK-NEXT:  	b.cc	<myfun+0x50>  // b.lo, b.ul, b.last
 // CHECK-NEXT:  	stp	q3, q2, [x13]

@@ -87,6 +87,7 @@ func.func @myfun(
 // CHECK-NEXT:      transform.annotate %loops_1 "j" : !transform.any_op
 // CHECK-NEXT:      %tiled_linalg_op_2, %loops_3 = transform.structured.tile_using_for %tiled_linalg_op_0 tile_sizes [1, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
 // CHECK-NEXT:      transform.annotate %loops_3 "i1" : !transform.any_op
+// CHECK-NEXT:      transform.structured.vectorize %tiled_linalg_op_2 : !transform.any_op
 // CHECK-NEXT:      %1 = transform.structured.match attributes {__node1__} in %arg0 : (!transform.any_op) -> !transform.any_op
 // CHECK-NEXT:      %tiled_linalg_op_4, %loops_5 = transform.structured.tile_using_for %1 tile_sizes [0, 8] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
 // CHECK-NEXT:      transform.annotate %loops_5 "k" : !transform.any_op
@@ -94,6 +95,7 @@ func.func @myfun(
 // CHECK-NEXT:      transform.annotate %loops_7 "j" : !transform.any_op
 // CHECK-NEXT:      %tiled_linalg_op_8, %loops_9 = transform.structured.tile_using_for %tiled_linalg_op_6 tile_sizes [0, 1] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
 // CHECK-NEXT:      transform.annotate %loops_9 "k1" : !transform.any_op
+// CHECK-NEXT:      transform.structured.vectorize %tiled_linalg_op_8 : !transform.any_op
 // CHECK-NEXT:      %2 = transform.structured.match attributes {__node2__} in %arg0 : (!transform.any_op) -> !transform.any_op
 // CHECK-NEXT:      %tiled_linalg_op_10, %loops_11 = transform.structured.tile_using_for %2 tile_sizes [1, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
 // CHECK-NEXT:      transform.annotate %loops_11 "i" : !transform.any_op
@@ -105,12 +107,7 @@ func.func @myfun(
 // CHECK-NEXT:      transform.annotate %loops_17 "i1" : !transform.any_op
 // CHECK-NEXT:      %tiled_linalg_op_18, %loops_19 = transform.structured.tile_using_for %tiled_linalg_op_16 tile_sizes [0, 0, 1] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
 // CHECK-NEXT:      transform.annotate %loops_19 "k1" : !transform.any_op
-// CHECK-NEXT:      %3 = transform.get_parent_op %loops_11 {isolated_from_above} : (!transform.any_op) -> !transform.any_op
-// CHECK-NEXT:      %4 = transform.structured.vectorize_children_and_apply_patterns %3 : (!transform.any_op) -> !transform.any_op
-// CHECK-NEXT:      transform.apply_patterns to %4 {
-// CHECK-NEXT:        transform.apply_patterns.vector.lower_outerproduct
-// CHECK-NEXT:        transform.apply_patterns.vector.lower_contraction
-// CHECK-NEXT:      } : !transform.any_op
+// CHECK-NEXT:      transform.structured.vectorize %tiled_linalg_op_18 : !transform.any_op
 // CHECK-NEXT:      transform.yield 
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }

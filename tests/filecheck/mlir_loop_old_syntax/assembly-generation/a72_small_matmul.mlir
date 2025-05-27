@@ -11,170 +11,100 @@ func.func @myfun(
   return
 }
 // CHECK:       <myfun>:
-// CHECK-NEXT:  	stp	d13, d12, [sp, #-48]!
-// CHECK-NEXT:  	stp	d11, d10, [sp, #16]
-// CHECK-NEXT:  	stp	d9, d8, [sp, #32]
-// CHECK-NEXT:  	ldp	s4, s0, [x1]
-// CHECK-NEXT:  	ldp	s20, s24, [x0]
-// CHECK-NEXT:  	fmul	s16, s20, s4
-// CHECK-NEXT:  	ldp	s7, s2, [x1, #16]
-// CHECK-NEXT:  	fmul	s19, s24, s7
-// CHECK-NEXT:  	ldp	s6, s3, [x1, #32]
-// CHECK-NEXT:  	ldp	s25, s26, [x0, #8]
-// CHECK-NEXT:  	fmul	s27, s25, s6
-// CHECK-NEXT:  	ldp	s18, s5, [x1, #48]
-// CHECK-NEXT:  	fmul	s28, s26, s18
-// CHECK-NEXT:  	fmul	s21, s20, s0
-// CHECK-NEXT:  	fmul	s23, s24, s2
-// CHECK-NEXT:  	fmul	s29, s25, s3
-// CHECK-NEXT:  	fmul	s30, s26, s5
-// CHECK-NEXT:  	ldp	s17, s1, [x1, #8]
-// CHECK-NEXT:  	fmul	s22, s20, s17
-// CHECK-NEXT:  	ldp	s31, s8, [x2]
-// CHECK-NEXT:  	fadd	s31, s31, s16
-// CHECK-NEXT:  	fadd	s8, s8, s21
-// CHECK-NEXT:  	ldp	s16, s9, [x2, #8]
-// CHECK-NEXT:  	fadd	s10, s16, s22
-// CHECK-NEXT:  	ldp	s21, s16, [x1, #24]
-// CHECK-NEXT:  	fmul	s11, s24, s21
-// CHECK-NEXT:  	fadd	s31, s31, s19
-// CHECK-NEXT:  	ldp	s22, s19, [x1, #40]
-// CHECK-NEXT:  	fmul	s12, s25, s22
-// CHECK-NEXT:  	fmul	s20, s20, s1
-// CHECK-NEXT:  	fadd	s9, s9, s20
-// CHECK-NEXT:  	fadd	s8, s8, s23
-// CHECK-NEXT:  	fadd	s10, s10, s11
-// CHECK-NEXT:  	ldp	s23, s20, [x1, #56]
-// CHECK-NEXT:  	fmul	s11, s26, s23
-// CHECK-NEXT:  	fmul	s24, s24, s16
-// CHECK-NEXT:  	fmul	s25, s25, s19
-// CHECK-NEXT:  	fmul	s13, s26, s20
-// CHECK-NEXT:  	fadd	s24, s9, s24
-// CHECK-NEXT:  	fadd	s26, s31, s27
-// CHECK-NEXT:  	fadd	s27, s8, s29
-// CHECK-NEXT:  	ldp	s29, s31, [x0, #16]
-// CHECK-NEXT:  	fmul	s8, s29, s4
-// CHECK-NEXT:  	fadd	s9, s10, s12
-// CHECK-NEXT:  	fadd	s10, s24, s25
-// CHECK-NEXT:  	fadd	s24, s26, s28
-// CHECK-NEXT:  	fadd	s25, s27, s30
-// CHECK-NEXT:  	fadd	s26, s9, s11
-// CHECK-NEXT:  	fadd	s27, s10, s13
-// CHECK-NEXT:  	ldp	s28, s30, [x2, #16]
-// CHECK-NEXT:  	fadd	s28, s28, s8
-// CHECK-NEXT:  	fmul	s8, s31, s7
-// CHECK-NEXT:  	fadd	s28, s28, s8
-// CHECK-NEXT:  	ldp	s8, s9, [x0, #24]
-// CHECK-NEXT:  	fmul	s10, s8, s6
-// CHECK-NEXT:  	fadd	s28, s28, s10
-// CHECK-NEXT:  	fmul	s10, s9, s18
-// CHECK-NEXT:  	fadd	s28, s28, s10
-// CHECK-NEXT:  	fmul	s10, s29, s0
-// CHECK-NEXT:  	fadd	s30, s30, s10
-// CHECK-NEXT:  	fmul	s10, s31, s2
-// CHECK-NEXT:  	fadd	s30, s30, s10
-// CHECK-NEXT:  	fmul	s10, s8, s3
-// CHECK-NEXT:  	fadd	s30, s30, s10
-// CHECK-NEXT:  	fmul	s10, s9, s5
-// CHECK-NEXT:  	fadd	s30, s30, s10
-// CHECK-NEXT:  	fmul	s10, s29, s17
-// CHECK-NEXT:  	ldp	s11, s12, [x2, #24]
-// CHECK-NEXT:  	fadd	s10, s11, s10
-// CHECK-NEXT:  	fmul	s11, s31, s21
-// CHECK-NEXT:  	fadd	s10, s10, s11
-// CHECK-NEXT:  	fmul	s11, s8, s22
-// CHECK-NEXT:  	fadd	s10, s10, s11
-// CHECK-NEXT:  	fmul	s11, s9, s23
-// CHECK-NEXT:  	fadd	s10, s10, s11
-// CHECK-NEXT:  	fmul	s29, s29, s1
-// CHECK-NEXT:  	fadd	s29, s12, s29
-// CHECK-NEXT:  	fmul	s31, s31, s16
-// CHECK-NEXT:  	fadd	s29, s29, s31
-// CHECK-NEXT:  	fmul	s31, s8, s19
-// CHECK-NEXT:  	fadd	s29, s29, s31
-// CHECK-NEXT:  	fmul	s31, s9, s20
-// CHECK-NEXT:  	fadd	s29, s29, s31
-// CHECK-NEXT:  	ldp	s31, s8, [x0, #32]
-// CHECK-NEXT:  	fmul	s9, s31, s4
-// CHECK-NEXT:  	ldp	s11, s12, [x2, #32]
-// CHECK-NEXT:  	fadd	s9, s11, s9
-// CHECK-NEXT:  	stp	s24, s25, [x2]
-// CHECK-NEXT:  	stp	s26, s27, [x2, #8]
-// CHECK-NEXT:  	stp	s28, s30, [x2, #16]
-// CHECK-NEXT:  	stp	s10, s29, [x2, #24]
-// CHECK-NEXT:  	fmul	s24, s8, s7
-// CHECK-NEXT:  	fadd	s24, s9, s24
-// CHECK-NEXT:  	ldp	s25, s26, [x0, #40]
-// CHECK-NEXT:  	fmul	s27, s25, s6
-// CHECK-NEXT:  	fadd	s24, s24, s27
-// CHECK-NEXT:  	fmul	s27, s26, s18
-// CHECK-NEXT:  	fadd	s24, s24, s27
-// CHECK-NEXT:  	fmul	s27, s31, s0
-// CHECK-NEXT:  	fadd	s27, s12, s27
-// CHECK-NEXT:  	fmul	s28, s8, s2
-// CHECK-NEXT:  	fadd	s27, s27, s28
-// CHECK-NEXT:  	fmul	s28, s25, s3
-// CHECK-NEXT:  	fadd	s27, s27, s28
-// CHECK-NEXT:  	fmul	s28, s26, s5
-// CHECK-NEXT:  	fadd	s27, s27, s28
-// CHECK-NEXT:  	stp	s24, s27, [x2, #32]
-// CHECK-NEXT:  	fmul	s24, s31, s17
-// CHECK-NEXT:  	ldp	s27, s28, [x2, #40]
-// CHECK-NEXT:  	fadd	s24, s27, s24
-// CHECK-NEXT:  	fmul	s27, s8, s21
-// CHECK-NEXT:  	fadd	s24, s24, s27
-// CHECK-NEXT:  	fmul	s27, s25, s22
-// CHECK-NEXT:  	fadd	s24, s24, s27
-// CHECK-NEXT:  	fmul	s27, s26, s23
-// CHECK-NEXT:  	fadd	s24, s24, s27
-// CHECK-NEXT:  	fmul	s27, s31, s1
-// CHECK-NEXT:  	fadd	s27, s28, s27
-// CHECK-NEXT:  	fmul	s28, s8, s16
-// CHECK-NEXT:  	fadd	s27, s27, s28
-// CHECK-NEXT:  	fmul	s25, s25, s19
-// CHECK-NEXT:  	fadd	s25, s27, s25
-// CHECK-NEXT:  	fmul	s26, s26, s20
-// CHECK-NEXT:  	fadd	s25, s25, s26
-// CHECK-NEXT:  	stp	s24, s25, [x2, #40]
+// CHECK-NEXT:  	ldp	s2, s0, [x1, #56]
+// CHECK-NEXT:  	ldp	s4, s1, [x1, #40]
+// CHECK-NEXT:  	ldp	s6, s3, [x1, #24]
+// CHECK-NEXT:  	ldp	s7, s5, [x1, #8]
+// CHECK-NEXT:  	ldp	s17, s16, [x1, #32]
+// CHECK-NEXT:  	ldp	s21, s18, [x1, #16]
+// CHECK-NEXT:  	ldp	s23, s20, [x1]
+// CHECK-NEXT:  	ldp	s22, s19, [x1, #48]
+// CHECK-NEXT:  	ldp	s24, s25, [x0]
+// CHECK-NEXT:  	ldp	s26, s27, [x2]
+// CHECK-NEXT:  	fmadd	s26, s24, s23, s26
+// CHECK-NEXT:  	ldp	s28, s29, [x2, #8]
+// CHECK-NEXT:  	fmadd	s27, s24, s20, s27
+// CHECK-NEXT:  	fmadd	s28, s24, s7, s28
+// CHECK-NEXT:  	fmadd	s24, s24, s5, s29
+// CHECK-NEXT:  	fmadd	s26, s25, s21, s26
+// CHECK-NEXT:  	fmadd	s27, s25, s18, s27
+// CHECK-NEXT:  	fmadd	s28, s25, s6, s28
+// CHECK-NEXT:  	fmadd	s24, s25, s3, s24
+// CHECK-NEXT:  	ldp	s25, s29, [x0, #8]
+// CHECK-NEXT:  	fmadd	s26, s25, s17, s26
+// CHECK-NEXT:  	fmadd	s27, s25, s16, s27
+// CHECK-NEXT:  	fmadd	s28, s25, s4, s28
+// CHECK-NEXT:  	fmadd	s24, s25, s1, s24
+// CHECK-NEXT:  	fmadd	s25, s29, s22, s26
+// CHECK-NEXT:  	fmadd	s26, s29, s19, s27
+// CHECK-NEXT:  	fmadd	s27, s29, s2, s28
+// CHECK-NEXT:  	fmadd	s24, s29, s0, s24
+// CHECK-NEXT:  	ldp	s28, s29, [x0, #16]
+// CHECK-NEXT:  	stp	s25, s26, [x2]
+// CHECK-NEXT:  	ldp	s25, s26, [x2, #16]
+// CHECK-NEXT:  	fmadd	s25, s28, s23, s25
+// CHECK-NEXT:  	fmadd	s25, s29, s21, s25
+// CHECK-NEXT:  	stp	s27, s24, [x2, #8]
+// CHECK-NEXT:  	ldp	s24, s27, [x0, #24]
+// CHECK-NEXT:  	fmadd	s25, s24, s17, s25
+// CHECK-NEXT:  	fmadd	s25, s27, s22, s25
+// CHECK-NEXT:  	fmadd	s26, s28, s20, s26
+// CHECK-NEXT:  	fmadd	s26, s29, s18, s26
+// CHECK-NEXT:  	fmadd	s26, s24, s16, s26
+// CHECK-NEXT:  	fmadd	s26, s27, s19, s26
+// CHECK-NEXT:  	stp	s25, s26, [x2, #16]
+// CHECK-NEXT:  	ldp	s25, s26, [x2, #24]
+// CHECK-NEXT:  	fmadd	s25, s28, s7, s25
+// CHECK-NEXT:  	fmadd	s25, s29, s6, s25
+// CHECK-NEXT:  	fmadd	s25, s24, s4, s25
+// CHECK-NEXT:  	fmadd	s25, s27, s2, s25
+// CHECK-NEXT:  	fmadd	s26, s28, s5, s26
+// CHECK-NEXT:  	fmadd	s26, s29, s3, s26
+// CHECK-NEXT:  	fmadd	s24, s24, s1, s26
+// CHECK-NEXT:  	fmadd	s24, s27, s0, s24
+// CHECK-NEXT:  	stp	s25, s24, [x2, #24]
+// CHECK-NEXT:  	ldp	s24, s25, [x0, #32]
+// CHECK-NEXT:  	ldp	s26, s27, [x2, #32]
+// CHECK-NEXT:  	fmadd	s26, s24, s23, s26
+// CHECK-NEXT:  	fmadd	s26, s25, s21, s26
+// CHECK-NEXT:  	ldp	s28, s29, [x0, #40]
+// CHECK-NEXT:  	fmadd	s26, s28, s17, s26
+// CHECK-NEXT:  	fmadd	s26, s29, s22, s26
+// CHECK-NEXT:  	fmadd	s27, s24, s20, s27
+// CHECK-NEXT:  	fmadd	s27, s25, s18, s27
+// CHECK-NEXT:  	fmadd	s27, s28, s16, s27
+// CHECK-NEXT:  	fmadd	s27, s29, s19, s27
+// CHECK-NEXT:  	stp	s26, s27, [x2, #32]
+// CHECK-NEXT:  	ldp	s26, s27, [x2, #40]
+// CHECK-NEXT:  	fmadd	s26, s24, s7, s26
+// CHECK-NEXT:  	fmadd	s24, s24, s5, s27
+// CHECK-NEXT:  	fmadd	s26, s25, s6, s26
+// CHECK-NEXT:  	fmadd	s26, s28, s4, s26
+// CHECK-NEXT:  	fmadd	s26, s29, s2, s26
+// CHECK-NEXT:  	fmadd	s24, s25, s3, s24
+// CHECK-NEXT:  	fmadd	s24, s28, s1, s24
+// CHECK-NEXT:  	fmadd	s24, s29, s0, s24
+// CHECK-NEXT:  	stp	s26, s24, [x2, #40]
 // CHECK-NEXT:  	ldp	s24, s25, [x0, #48]
-// CHECK-NEXT:  	fmul	s4, s24, s4
 // CHECK-NEXT:  	ldp	s26, s27, [x2, #48]
-// CHECK-NEXT:  	fadd	s4, s26, s4
-// CHECK-NEXT:  	fmul	s7, s25, s7
-// CHECK-NEXT:  	fadd	s4, s4, s7
-// CHECK-NEXT:  	ldp	s7, s26, [x0, #56]
-// CHECK-NEXT:  	fmul	s6, s7, s6
-// CHECK-NEXT:  	fadd	s4, s4, s6
-// CHECK-NEXT:  	fmul	s6, s26, s18
-// CHECK-NEXT:  	fadd	s4, s4, s6
-// CHECK-NEXT:  	fmul	s0, s24, s0
-// CHECK-NEXT:  	fadd	s0, s27, s0
-// CHECK-NEXT:  	fmul	s2, s25, s2
-// CHECK-NEXT:  	fadd	s0, s0, s2
-// CHECK-NEXT:  	fmul	s2, s7, s3
-// CHECK-NEXT:  	fadd	s0, s0, s2
-// CHECK-NEXT:  	fmul	s2, s26, s5
-// CHECK-NEXT:  	fadd	s0, s0, s2
-// CHECK-NEXT:  	stp	s4, s0, [x2, #48]
-// CHECK-NEXT:  	fmul	s0, s24, s17
-// CHECK-NEXT:  	ldp	s2, s3, [x2, #56]
-// CHECK-NEXT:  	fadd	s0, s2, s0
-// CHECK-NEXT:  	fmul	s2, s25, s21
-// CHECK-NEXT:  	fadd	s0, s0, s2
-// CHECK-NEXT:  	fmul	s2, s7, s22
-// CHECK-NEXT:  	fadd	s0, s0, s2
-// CHECK-NEXT:  	fmul	s2, s26, s23
-// CHECK-NEXT:  	fadd	s0, s0, s2
-// CHECK-NEXT:  	fmul	s1, s24, s1
-// CHECK-NEXT:  	fadd	s1, s3, s1
-// CHECK-NEXT:  	fmul	s2, s25, s16
-// CHECK-NEXT:  	fadd	s1, s1, s2
-// CHECK-NEXT:  	fmul	s2, s7, s19
-// CHECK-NEXT:  	fadd	s1, s1, s2
-// CHECK-NEXT:  	fmul	s2, s26, s20
-// CHECK-NEXT:  	fadd	s1, s1, s2
-// CHECK-NEXT:  	stp	s0, s1, [x2, #56]
-// CHECK-NEXT:  	ldp	d9, d8, [sp, #32]
-// CHECK-NEXT:  	ldp	d11, d10, [sp, #16]
-// CHECK-NEXT:  	ldp	d13, d12, [sp], #48
+// CHECK-NEXT:  	fmadd	s23, s24, s23, s26
+// CHECK-NEXT:  	fmadd	s21, s25, s21, s23
+// CHECK-NEXT:  	ldp	s23, s26, [x0, #56]
+// CHECK-NEXT:  	fmadd	s17, s23, s17, s21
+// CHECK-NEXT:  	fmadd	s17, s26, s22, s17
+// CHECK-NEXT:  	fmadd	s20, s24, s20, s27
+// CHECK-NEXT:  	fmadd	s18, s25, s18, s20
+// CHECK-NEXT:  	fmadd	s16, s23, s16, s18
+// CHECK-NEXT:  	fmadd	s16, s26, s19, s16
+// CHECK-NEXT:  	stp	s17, s16, [x2, #48]
+// CHECK-NEXT:  	ldp	s16, s17, [x2, #56]
+// CHECK-NEXT:  	fmadd	s7, s24, s7, s16
+// CHECK-NEXT:  	fmadd	s6, s25, s6, s7
+// CHECK-NEXT:  	fmadd	s4, s23, s4, s6
+// CHECK-NEXT:  	fmadd	s2, s26, s2, s4
+// CHECK-NEXT:  	fmadd	s4, s24, s5, s17
+// CHECK-NEXT:  	fmadd	s3, s25, s3, s4
+// CHECK-NEXT:  	fmadd	s1, s23, s1, s3
+// CHECK-NEXT:  	fmadd	s0, s26, s0, s1
+// CHECK-NEXT:  	stp	s2, s0, [x2, #56]
 // CHECK-NEXT:  	ret

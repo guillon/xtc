@@ -638,8 +638,8 @@ func.func @myfun(
 // CHECK-NEXT:  	vfmadd231ps 0xa0(%rdi),%ymm8,%ymm2
 // CHECK-NEXT:  	vfmadd231ps 0xc0(%rdi),%ymm8,%ymm1
 // CHECK-NEXT:  	vfmadd231ps 0xe0(%rdi),%ymm8,%ymm0
-// CHECK-NEXT:  	add    $0x40,%rsi
 // CHECK-NEXT:  	add    $0x10000,%rdi
+// CHECK-NEXT:  	add    $0x40,%rsi
 // CHECK-NEXT:  	cmp    $0x1c0,%rsi
 // CHECK-NEXT:  	jb     <myfun+0xa0>
 // CHECK-NEXT:  	vmovups %ymm4,(%rax,%rdx,4)

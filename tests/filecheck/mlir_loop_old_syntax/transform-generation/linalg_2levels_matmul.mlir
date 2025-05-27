@@ -50,14 +50,9 @@ func.func @myfun(
 // CHECK-NEXT:      transform.annotate %loops_11 "i2" : !transform.any_op
 // CHECK-NEXT:      %tiled_linalg_op_12, %loops_13 = transform.structured.tile_using_for %tiled_linalg_op_10 tile_sizes [0, 0, 1] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
 // CHECK-NEXT:      transform.annotate %loops_13 "k2" : !transform.any_op
+// CHECK-NEXT:      transform.structured.vectorize %tiled_linalg_op_12 : !transform.any_op
 // CHECK-NEXT:      transform.loop.unroll %loops_13 {factor = 8 : i64} : !transform.any_op
 // CHECK-NEXT:      transform.loop.unroll %loops_11 {factor = 1 : i64} : !transform.any_op
-// CHECK-NEXT:      %1 = transform.get_parent_op %loops {isolated_from_above} : (!transform.any_op) -> !transform.any_op
-// CHECK-NEXT:      %2 = transform.structured.vectorize_children_and_apply_patterns %1 : (!transform.any_op) -> !transform.any_op
-// CHECK-NEXT:      transform.apply_patterns to %2 {
-// CHECK-NEXT:        transform.apply_patterns.vector.lower_outerproduct
-// CHECK-NEXT:        transform.apply_patterns.vector.lower_contraction
-// CHECK-NEXT:      } : !transform.any_op
 // CHECK-NEXT:      transform.yield 
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }

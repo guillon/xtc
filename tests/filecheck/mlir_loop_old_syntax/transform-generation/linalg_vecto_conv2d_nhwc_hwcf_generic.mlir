@@ -53,13 +53,8 @@ func.func @myfun(
 // CHECK-NEXT:    transform.named_sequence @__transform_main(%arg0: !transform.any_op {transform.readonly}) {
 // CHECK-NEXT:      %0 = transform.structured.match attributes {__node0__} in %arg0 : (!transform.any_op) -> !transform.any_op
 // CHECK-NEXT:      %1 = transform.get_parent_op %0 {isolated_from_above} : (!transform.any_op) -> !transform.any_op
-// CHECK-NEXT:      %2 = transform.structured.vectorize_children_and_apply_patterns %1 : (!transform.any_op) -> !transform.any_op
-// CHECK-NEXT:      transform.apply_patterns to %2 {
-// CHECK-NEXT:        transform.apply_patterns.vector.lower_outerproduct
-// CHECK-NEXT:        transform.apply_patterns.vector.lower_contraction
-// CHECK-NEXT:      } : !transform.any_op
-// CHECK-NEXT:      %3 = transform.apply_registered_pass "convert-linalg-to-affine-loops" to %2 : (!transform.any_op) -> !transform.any_op
-// CHECK-NEXT:      %4 = transform.apply_registered_pass "affine-super-vectorize" to %3 {options = "virtual-vector-size=8"} : (!transform.any_op) -> !transform.any_op
+// CHECK-NEXT:      %2 = transform.apply_registered_pass "convert-linalg-to-affine-loops" to %1 : (!transform.any_op) -> !transform.any_op
+// CHECK-NEXT:      %3 = transform.apply_registered_pass "affine-super-vectorize" to %2 {options = "virtual-vector-size=8"} : (!transform.any_op) -> !transform.any_op
 // CHECK-NEXT:      transform.yield 
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }

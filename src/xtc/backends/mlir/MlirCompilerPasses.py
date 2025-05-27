@@ -9,7 +9,11 @@ from mlir.dialects.transform import (
     vector,
     get_parent_op,
 )
-from mlir.dialects.transform.structured import TileUsingForallOp, TileUsingForOp
+from mlir.dialects.transform.structured import (
+    TileUsingForallOp,
+    TileUsingForOp,
+    VectorizeOp,
+)
 from mlir.dialects.transform.structured import structured_match
 from mlir.dialects.transform.loop import loop_unroll
 from mlir.ir import (
@@ -76,37 +80,6 @@ class MlirProgramInsertTransformPass:
             else:
                 transform.YieldOp([])
 
-    def _generate_vectorization(self, handle: OpResult) -> OpResult:
-        if self._always_vectorize or self._needs_vectorization():
-            handle = get_parent_op(
-                transform.AnyOpType.get(),
-                handle,
-                isolated_from_above=True,
-            )
-            handle = structured.VectorizeChildrenAndApplyPatternsOp(handle)
-            with InsertionPoint(transform.ApplyPatternsOp(handle).patterns):
-                vector.ApplyLowerOuterProductPatternsOp()
-                vector.ApplyLowerContractionPatternsOp()
-            if self._vectors_size is not None:
-                handle = transform.ApplyRegisteredPassOp(
-                    transform.AnyOpType.get(),
-                    handle,
-                    pass_name="convert-linalg-to-affine-loops",
-                )
-                handle = transform.ApplyRegisteredPassOp(
-                    transform.AnyOpType.get(),
-                    handle,
-                    pass_name="affine-super-vectorize",
-                    options=f"virtual-vector-size={self._vectors_size}",
-                )
-        return handle
-
-    def _needs_vectorization(self) -> bool:
-        for schedule in self._nodes_schedules:
-            if self._node_needs_vectorization(schedule):
-                return True
-        return False
-
     def _generate_tiling(self) -> OpResult:
         assert self._named_sequence is not None
         handle = None
@@ -131,15 +104,29 @@ class MlirProgramInsertTransformPass:
             self._loc,
         ):
             handle = self._generate_tiling()
-            handle = self._generate_vectorization(handle)
+            if self._vectors_size:
+                handle = get_parent_op(
+                    transform.AnyOpType.get(),
+                    handle,
+                    isolated_from_above=True,
+                )
+                affine_code = transform.ApplyRegisteredPassOp(
+                    transform.AnyOpType.get(),
+                    handle,
+                    pass_name="convert-linalg-to-affine-loops",
+                )
+                handle = transform.ApplyRegisteredPassOp(
+                    transform.AnyOpType.get(),
+                    affine_code,
+                    pass_name="affine-super-vectorize",
+                    options=f"virtual-vector-size={self._vectors_size}",
+                )
+
             for p in self._concluding_passes:
                 handle = transform.ApplyRegisteredPassOp(
                     transform.AnyOpType.get(), handle, pass_name=p
                 )
             transform.YieldOp([])
-
-    def _node_needs_vectorization(self, schedule: MlirNodeSchedule) -> bool:
-        return len(schedule.vectorization) > 0
 
     def _generate_node_schedule(
         self,
@@ -210,6 +197,8 @@ class MlirProgramInsertTransformPass:
                 continue
             # Useless to materialize a loop which will be vectorized
             elif axis_name in schedule.vectorization:
+                if self._vectors_size is None:
+                    VectorizeOp(target_op)
                 break
 
             # Generate the tiling itself
@@ -224,6 +213,10 @@ class MlirProgramInsertTransformPass:
             all_loops[axis_name] = new_loop
             # Annotate the resulting loop if successfully generated
             transform.AnnotateOp(new_loop, axis_name)
+
+        # If required, make sure vectorization is applied
+        if self._always_vectorize and self._vectors_size is None:
+            VectorizeOp(target_op)
 
         # The resulting operation is either the outermost loop or
         # the initial (not tiled) handle
