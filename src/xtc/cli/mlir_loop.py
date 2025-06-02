@@ -12,6 +12,7 @@ from xdsl.dialects import func, builtin
 from xdsl.ir import Operation
 
 from xtc.itf.schd.scheduler import Scheduler
+from xtc.schedules.descript import Descript
 from xtc.utils.xdsl_aux import parse_xdsl_module
 from xtc.backends.mlir.MlirNodeBackend import MlirNodeBackend
 from xtc.backends.mlir.MlirGraphBackend import MlirGraphBackend
@@ -103,6 +104,31 @@ def main():
         print(min(res))
 
 
+def normalize_schedule(
+    raw_schedule: builtin.DictionaryAttr,
+) -> dict[str, dict]:
+    schedule: dict[str, Any] = {}
+    for declaration, val in raw_schedule.data.items():
+        assert isinstance(declaration, str)
+        if ":" in declaration:
+            assert isinstance(val, builtin.DictionaryAttr)
+            inner_schedule = normalize_schedule(val)
+            schedule[str(declaration)] = inner_schedule
+        else:
+            annotations: dict[str, int | None] = {}
+            if isinstance(val, builtin.DictionaryAttr):
+                for instr, param in val.data.items():
+                    assert isinstance(instr, str)
+                    if isinstance(param, builtin.UnitAttr):
+                        annotations[instr] = None
+                    elif isinstance(param, builtin.IntegerAttr):
+                        annotations[instr] = param.value.data
+                    else:
+                        raise Exception(f"Annotation parameter should be void or int.")
+            schedule[declaration] = annotations
+    return schedule
+
+
 def parse_scheduler(
     op: Operation,
     node_name: str,
@@ -119,175 +145,17 @@ def parse_scheduler(
     )
 
     scheduler = backend.get_scheduler()
+    assert isinstance(scheduler.backend, MlirNodeBackend)
 
     if "loop.schedule" in op.attributes:
         schedule_attribute = op.attributes.get("loop.schedule")
         assert isinstance(schedule_attribute, builtin.DictionaryAttr)
-        build_schedule(
-            scheduler=scheduler,
-            schedule=schedule_attribute,
-            node_name=node_name,
-        )
+        normal_schedule = normalize_schedule(schedule_attribute)
+        descript = Descript(scheduler=scheduler, initial_axis=scheduler.backend.dims)
+        descript.apply(node_name=node_name, spec=normal_schedule)
         remove_attribute(op, "loop.schedule")
 
     return scheduler
-
-
-def build_schedule(
-    scheduler: Scheduler, schedule: builtin.DictionaryAttr, node_name: str
-):
-    assert isinstance(scheduler.backend, MlirNodeBackend)
-
-    dict_schedule = parse_schedule(
-        schedule=schedule, dims=scheduler.backend.dims, root=node_name
-    )
-    splits = dict_schedule["splits"]
-    tiles = dict_schedule["tiles"]
-    interchanges = dict_schedule["interchanges"]
-    vectorize = dict_schedule["vectorize"]
-    parallelize = dict_schedule["parallelize"]
-    unroll = dict_schedule["unroll"]
-
-    for interchange in interchanges:
-        scheduler.interchange(interchange)
-    for dim in splits:
-        scheduler.split(dim, splits[dim])
-    for dim in tiles:
-        scheduler.tile(dim, tiles[dim])
-    scheduler.vectorize(vectorize)
-    scheduler.parallelize(parallelize)
-    scheduler.unroll(unroll)
-    return scheduler
-
-
-def parse_schedule(
-    schedule: builtin.DictionaryAttr,
-    dims: list[str],
-    root: str,
-) -> dict[str, Any]:
-    sched = {
-        "splits": {d: {} for d in dims},
-        "tiles": {d: {} for d in dims},
-        "interchanges": [],
-        "vectorize": [],
-        "parallelize": [],
-        "unroll": {},
-    }
-    # Temporary state
-    sizes: dict[str, int | None] = {}
-    previous_cut: dict[str, int | None] = {d: 0 for d in dims}
-    interchange: list[str] = [root]
-    # Processing the schedule
-    for declaration, val in schedule.data.items():
-        if ":" in declaration:
-            dim_name, x, y = parse_split(declaration)
-            # The only declaration where y (the cut) is None is the
-            # last one, so it cannot be the previous one.
-            assert previous_cut[dim_name] is not None
-            # When x (the starting point of the slice), is not
-            # specified, it is the previous cut
-            if x is None:
-                x = previous_cut[dim_name]
-            assert x is not None
-            # Update the previous cut
-            previous_cut[dim_name] = y
-            # Save the cutting points of the new dimensions
-            new_dim_index = len(sched["splits"][dim_name])
-            new_dim_name = f"{root}/{dim_name}[{new_dim_index}]"
-            sched["splits"][dim_name][new_dim_name] = x
-            interchange.append(new_dim_name)
-            # Fetch the schedule associated with the new dimension
-            assert isinstance(val, builtin.DictionaryAttr)
-            next_schedule = val
-            assert next_schedule
-            inner_sched = parse_schedule(
-                schedule=next_schedule, dims=dims, root=new_dim_name
-            )
-            sched = merge_sched_dicts(sched, inner_sched)
-            continue
-
-        # Tiles
-        if "#" in declaration:
-            dim_name, tile_size = declaration.split("#")
-            loop_size = int(tile_size)
-            tile_num = len(sched["tiles"][dim_name])
-            loop_name = f"{root}/{dim_name}{tile_num}"
-            sched["tiles"][dim_name][loop_name] = loop_size
-        # Initial dimensions
-        elif declaration in dims:
-            dim_name = declaration
-            loop_size = 1
-            tile_num = len(sched["tiles"][dim_name])
-            loop_name = f"{root}/{dim_name}{tile_num}"
-            sched["tiles"][dim_name][loop_name] = loop_size
-        else:
-            raise Exception(f"Unknown declaration: {declaration}")
-        sizes[loop_name] = loop_size
-        # Build the interchange
-        interchange.append(loop_name)
-        # Annotations
-        if isinstance(val, builtin.DictionaryAttr):
-            for annotation, param in val.data.items():
-                match annotation:
-                    case "unroll":
-                        if isinstance(param, builtin.UnitAttr):
-                            loop_size = sizes[loop_name]
-                            assert loop_size
-                            unroll_factor = loop_size
-                        elif isinstance(param, builtin.IntegerAttr):
-                            unroll_factor = param.value.data
-                        else:
-                            raise Exception(f"Unknown unroll factor for {loop_name}")
-                        sched["unroll"][loop_name] = unroll_factor
-                    case "vectorize":
-                        sched["vectorize"].append(loop_name)
-                    case "parallelize":
-                        sched["parallelize"].append(loop_name)
-                    case _:
-                        raise Exception(
-                            f"Unknown annotation on {loop_name}: {annotation}"
-                        )
-        elif isinstance(val, builtin.UnitAttr):
-            pass
-        else:
-            raise Exception(f"The annotation on {loop_name} must be a dict")
-    sched["interchanges"] = [interchange] + sched["interchanges"]
-    return sched
-
-
-def merge_sched_dicts(
-    sched1: dict[str, Any],
-    sched2: dict[str, Any],
-) -> dict[str, Any]:
-    result = {
-        "splits": sched1["splits"],  # tmp
-        "tiles": sched1["tiles"],  # tmp
-        "interchanges": sched1["interchanges"] + sched2["interchanges"],
-        "vectorize": list(set(sched1["vectorize"] + sched2["vectorize"])),
-        "parallelize": list(set(sched1["parallelize"] + sched2["parallelize"])),
-        "unroll": sched1["unroll"] | sched2["unroll"],
-    }
-
-    for d in sched2["splits"]:
-        for t in sched2["splits"][d]:
-            result["splits"][d][t] = sched2["splits"][d][t]
-
-    for d in sched2["tiles"]:
-        for t in sched2["tiles"][d]:
-            result["tiles"][d][t] = sched2["tiles"][d][t]
-    return result
-
-
-def parse_split(s: str) -> Tuple[str, int | None, int | None]:
-    pattern = r"^(.*)\[(?:(\d*)?):(?:(\d*)?)\]$"
-    match = re.match(pattern, s)
-    if not match:
-        raise ValueError("Wrong format.")
-
-    prefix, x_str, y_str = match.groups()
-    x = int(x_str) if x_str else None
-    y = int(y_str) if y_str else None
-    return prefix, x, y
 
 
 def parse_scheduler_legacy(
