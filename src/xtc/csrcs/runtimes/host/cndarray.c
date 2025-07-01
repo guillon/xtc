@@ -80,6 +80,7 @@ int CNDArray_fini(CNDArray* array)
   array->dl_tensor.data = NULL;
   CHostMemoryFree(array->dl_tensor.shape);
   array->dl_tensor.shape = NULL;
+  return 0;
 }
 
 void CNDArray_IncrementReference(CNDArray* array)

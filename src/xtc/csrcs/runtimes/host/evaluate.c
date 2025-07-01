@@ -7,7 +7,7 @@
 
 extern double fclock(void); /* from fclock.c */
 
-typedef void (*func0_t)();
+typedef void (*func0_t)(void);
 typedef void (*func1_t)(void *);
 typedef void (*func2_t)(void *,void *);
 typedef void (*func3_t)(void *,void *,void *);
@@ -124,31 +124,31 @@ void evaluate(double *results, int repeat,
   switch (nargs) {
   case 0:
     evaluate0(results, repeat, number, min_repeat_ms,
-	      func);
+	      (func0_t)func);
     break;
   case 1:
     evaluate1(results, repeat, number, min_repeat_ms,
-	      func, args[0]);
+	      (func1_t)func, args[0]);
     break;
   case 2:
     evaluate2(results, repeat, number, min_repeat_ms,
-	      func, args[0], args[1]);
+	      (func2_t)func, args[0], args[1]);
     break;
   case 3:
     evaluate3(results, repeat, number, min_repeat_ms,
-	      func, args[0], args[1], args[2]);
+	      (func3_t)func, args[0], args[1], args[2]);
     break;
   case 4:
     evaluate4(results, repeat, number, min_repeat_ms,
-	      func, args[0], args[1], args[2], args[3]);
+	      (func4_t)func, args[0], args[1], args[2], args[3]);
     break;
   case 5:
     evaluate5(results, repeat, number, min_repeat_ms,
-	      func, args[0], args[1], args[2], args[3], args[4]);
+	      (func5_t)func, args[0], args[1], args[2], args[3], args[4]);
     break;
   case 6:
     evaluate6(results, repeat, number, min_repeat_ms,
-	      func, args[0], args[1], args[2], args[3], args[4], args[5]);
+	      (func6_t)func, args[0], args[1], args[2], args[3], args[4], args[5]);
     break;
   default:
     assert(0);
