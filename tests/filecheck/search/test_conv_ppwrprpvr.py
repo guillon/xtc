@@ -20,7 +20,7 @@ utils.print_all_opt_schedules(backend, strategy)
 utils.print_exhaustive_samples(backend, strategy, 200)
 
 # CHECK:       schedule O0: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]
-# CHECK-NEXT:  O = obj[-1]
+# CHECK-NEXT:  O = obj['%2']
 # CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
 # CHECK-NEXT:  b, h, w, f, = O.op.axis
 # CHECK-NEXT:  r, s, c, = O.op.reduce_axis
@@ -59,7 +59,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sch[O_W0].vectorize(f3)
 # CHECK-NEXT:  
 # CHECK-NEXT:  schedule O1: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]
-# CHECK-NEXT:  O = obj[-1]
+# CHECK-NEXT:  O = obj['%2']
 # CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
 # CHECK-NEXT:  b, h, w, f, = O.op.axis
 # CHECK-NEXT:  r, s, c, = O.op.reduce_axis
@@ -98,7 +98,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sch[O_W0].vectorize(f3)
 # CHECK-NEXT:  
 # CHECK-NEXT:  schedule O2: [1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 16, 1, 1, 1, 1]
-# CHECK-NEXT:  O = obj[-1]
+# CHECK-NEXT:  O = obj['%2']
 # CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
 # CHECK-NEXT:  b, h, w, f, = O.op.axis
 # CHECK-NEXT:  r, s, c, = O.op.reduce_axis
@@ -137,7 +137,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sch[O_W0].vectorize(f3)
 # CHECK-NEXT:  
 # CHECK-NEXT:  schedule O3: [1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 16, 1, 1, 3, 1]
-# CHECK-NEXT:  O = obj[-1]
+# CHECK-NEXT:  O = obj['%2']
 # CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
 # CHECK-NEXT:  b, h, w, f, = O.op.axis
 # CHECK-NEXT:  r, s, c, = O.op.reduce_axis
@@ -376,7 +376,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sample 198: [1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 32, 1, 1, 3, 0]
 # CHECK-NEXT:  sample 199: [1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 32, 1, 1, 3, 1]
 # CHECK-NEXT:  stats {'filtered_l2': 200, 'filtered_l1': 204, 'filtered_reg': 264, 'filtered_vec': 268, 'filtered': 3836, 'all': 6356}
-# CHECK-NEXT:  O = obj[-1]
+# CHECK-NEXT:  O = obj['%2']
 # CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
 # CHECK-NEXT:  b, h, w, f, = O.op.axis
 # CHECK-NEXT:  r, s, c, = O.op.reduce_axis

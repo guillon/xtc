@@ -11,7 +11,7 @@ import xtc.itf as itf
 from xtc.itf.graph import Graph
 from xtc.graphs.xtc.graph import XTCGraph
 
-from .TVMOps import TVMOperation
+from .TVMOps import TVMBaseExpr, TVMOperation
 from .TVMScheduler import TVMScheduler
 from .TVMCompiler import TVMCompiler
 
@@ -23,47 +23,43 @@ __all__ = [
 class TVMBackend(itf.back.Backend):
     def __init__(
         self,
-        source_op: TVMOperation | Graph,
+        source_op: TVMBaseExpr | Graph,
         dims: dict[str, int] | None = None,
         parallel_dims: list[str] | None = None,
         reduction_dims: list[str] | None = None,
         **kwargs: Any,
     ) -> None:
         self._graph: Graph | None = None
+        self._tvm_base: TVMBaseExpr
         if isinstance(source_op, XTCGraph):
             graph = source_op
             self._graph = graph
-            self.ops = [
-                TVMOperation.from_operation(node.operation, name=node.name)
-                for node in graph.nodes.values()
-            ]
-            self.dims = self.ops[-1].operator.dims_sizes()
+            self._tvm_base = TVMBaseExpr.from_graph(graph)
+            self._ops = self._tvm_base._operations
             self.payload_name = self._graph.name
         else:
             assert isinstance(source_op, TVMOperation)
             assert dims is not None
-            self.dims = dims
-            self.ops = [source_op]
+            self._tvm_base = source_op
+            assert source_op.name is not None
+            self._ops = {source_op.name: source_op}
             self.payload_name = source_op.name
-
-        self.op = self.ops[-1]
-
-        assert tuple(self.dims.keys()) == self.op.operator.dims(), (
-            f"incompatible dims names: {tuple(self.dims.keys())} != "
-            f"{self.op.operator.dims()}"
-        )
-        self.parallel_dims = self.op.operator.dims("P")
-        self.reduction_dims = self.op.operator.dims("R")
-        if parallel_dims is not None:
-            assert tuple(parallel_dims) == self.parallel_dims, (
-                f"incompatible parallel dims names: {tuple(parallel_dims)} != "
-                f"{self.parallel_dims}"
+            assert tuple(dims.keys()) == source_op.operator.dims(), (
+                f"incompatible dims names: {tuple(dims.keys())} != "
+                f"{source_op.operator.dims()}"
             )
-        if reduction_dims is not None:
-            assert tuple(reduction_dims) == self.reduction_dims, (
-                f"incompatible reduction dims names: {tuple(reduction_dims)} != "
-                f"{self.reduction_dims}"
-            )
+            op_parallel_dims = source_op.operator.dims("P")
+            op_reduction_dims = source_op.operator.dims("R")
+            if parallel_dims is not None:
+                assert tuple(parallel_dims) == op_parallel_dims, (
+                    f"incompatible parallel dims names: {tuple(parallel_dims)} != "
+                    f"{op_parallel_dims}"
+                )
+            if reduction_dims is not None:
+                assert tuple(reduction_dims) == op_reduction_dims, (
+                    f"incompatible reduction dims names: {tuple(reduction_dims)} != "
+                    f"{op_reduction_dims}"
+                )
 
     @override
     def get_scheduler(self, **kwargs: Any) -> itf.schd.Scheduler:

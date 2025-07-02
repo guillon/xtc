@@ -14,7 +14,7 @@ from xtc.targets.host import HostModule
 import xtc.backends.tvm as backend
 import xtc.itf as itf
 
-from .TVMOps import TVMOperation
+from .TVMOps import TVMBaseExpr
 
 __all__ = [
     "TVMCompiler",
@@ -70,7 +70,7 @@ class TVMCompiler(itf.comp.Compiler):
         assert isinstance(schedule, backend.TVMSchedule)
         assert self.dump_file is not None
         save_temp = self._save_temp
-        op = self._backend.op
+        op = self._backend._tvm_base
         func_name = self.payload_name
         packed_func_name = f"packed_{func_name}" if self.bare_ptr else func_name
 
@@ -84,11 +84,11 @@ class TVMCompiler(itf.comp.Compiler):
             if self.print_source_ir:
                 print(lowered, flush=True)
             save_temp(f"{dump_base}.initial.txt", lowered)
-        schedule_impl = cast(backend.TVMSchedule, schedule).schedule_impl
-        save_temp(f"{dump_base}.sched.txt", str(schedule_impl))
+        schedule = cast(backend.TVMSchedule, schedule)
+        save_temp(f"{dump_base}.sched.txt", str(schedule))
         if self.print_transformed_ir:
-            print(schedule_impl, flush=True)
-        sch = op.schedule(operation, schedule_impl)
+            print(schedule, flush=True)
+        sch = op.schedule(operation, schedule)
         if self.print_transformed_ir or self.save_temps:
             lowered = str(op.lower(operation, sch))
             if self.print_transformed_ir:
@@ -148,7 +148,7 @@ class PackedOperatorWrapper:
 
     def __init__(
         self,
-        operation: TVMOperation,
+        operation: TVMBaseExpr,
         func_name: str,
         packed_func_name: str,
         packed_lib_fname: str,

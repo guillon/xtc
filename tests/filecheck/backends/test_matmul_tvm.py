@@ -50,17 +50,17 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
 # CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(A: T.Buffer((4, 512), "float32"), B: T.Buffer((512, 32), "float32"), C: T.Buffer((4, 32), "float32")):
+# CHECK-NEXT:      def main(_0: T.Buffer((4, 512), "float32"), _1: T.Buffer((512, 32), "float32"), C: T.Buffer((4, 32), "float32")):
 # CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
 # CHECK-NEXT:          for i, j in T.grid(4, 32):
 # CHECK-NEXT:              C_1 = T.Buffer((128,), data=C.data)
 # CHECK-NEXT:              C_1[i * 32 + j] = T.float32(0.0)
 # CHECK-NEXT:              for k in range(512):
 # CHECK-NEXT:                  cse_var_1: T.int32 = i * 32 + j
-# CHECK-NEXT:                  A_1 = T.Buffer((2048,), data=A.data)
-# CHECK-NEXT:                  B_1 = T.Buffer((16384,), data=B.data)
-# CHECK-NEXT:                  C_1[cse_var_1] = C_1[cse_var_1] + A_1[i * 512 + k] * B_1[k * 32 + j]
-# CHECK-NEXT:  O = obj[-1]
+# CHECK-NEXT:                  _0_1 = T.Buffer((2048,), data=_0.data)
+# CHECK-NEXT:                  _1_1 = T.Buffer((16384,), data=_1.data)
+# CHECK-NEXT:                  C_1[cse_var_1] = C_1[cse_var_1] + _0_1[i * 512 + k] * _1_1[k * 32 + j]
+# CHECK-NEXT:  O = obj['C']
 # CHECK-NEXT:  i, j, = O.op.axis
 # CHECK-NEXT:  k, = O.op.reduce_axis
 # CHECK-NEXT:  i, i1 = sch[O].split(i, factor=2)
@@ -75,7 +75,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
 # CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(A: T.Buffer((4, 512), "float32"), B: T.Buffer((512, 32), "float32"), C: T.Buffer((4, 32), "float32")):
+# CHECK-NEXT:      def main(_0: T.Buffer((4, 512), "float32"), _1: T.Buffer((512, 32), "float32"), C: T.Buffer((4, 32), "float32")):
 # CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
 # CHECK-NEXT:          C_1 = T.Buffer((128,), data=C.data)
 # CHECK-NEXT:          for i_outer_init, j_outer_init in T.grid(2, 2):
@@ -88,8 +88,8 @@ print(f"CODE: {res}")
 # CHECK-NEXT:              cse_var_4: T.int32 = k * 32 + cse_var_6
 # CHECK-NEXT:              cse_var_3: T.int32 = i_outer * 64 + cse_var_6
 # CHECK-NEXT:              cse_var_2: T.int32 = cse_var_3 + 32
-# CHECK-NEXT:              A_1 = T.Buffer((2048,), data=A.data)
-# CHECK-NEXT:              B_1 = T.Buffer((16384,), data=B.data)
-# CHECK-NEXT:              C_1[cse_var_3:cse_var_3 + 16] = C_1[cse_var_3:cse_var_3 + 16] + T.Broadcast(A_1[cse_var_5], 16) * B_1[cse_var_4:cse_var_4 + 16]
-# CHECK-NEXT:              C_1[cse_var_2:cse_var_2 + 16] = C_1[cse_var_2:cse_var_2 + 16] + T.Broadcast(A_1[cse_var_5 + 512], 16) * B_1[cse_var_4:cse_var_4 + 16]
+# CHECK-NEXT:              _0_1 = T.Buffer((2048,), data=_0.data)
+# CHECK-NEXT:              _1_1 = T.Buffer((16384,), data=_1.data)
+# CHECK-NEXT:              C_1[cse_var_3:cse_var_3 + 16] = C_1[cse_var_3:cse_var_3 + 16] + T.Broadcast(_0_1[cse_var_5], 16) * _1_1[cse_var_4:cse_var_4 + 16]
+# CHECK-NEXT:              C_1[cse_var_2:cse_var_2 + 16] = C_1[cse_var_2:cse_var_2 + 16] + T.Broadcast(_0_1[cse_var_5 + 512], 16) * _1_1[cse_var_4:cse_var_4 + 16]
 # CHECK-NEXT:  CODE: 0

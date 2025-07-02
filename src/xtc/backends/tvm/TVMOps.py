@@ -3,20 +3,29 @@
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
 from abc import ABC, abstractmethod
+from collections.abc import Sequence, Mapping
 from typing_extensions import override
 import numpy as np
-from typing import Any, Type
+from typing import Any, Type, cast, TypeAlias
 
-from xtc.itf.graph import Operation
+from xtc.utils.math import mulall
+from xtc.graphs.xtc.expr import XTCTensorExpr  # TODO: generic
+
+from xtc.itf.graph import Operation, Graph, Node
 
 __all__ = [
+    "TVMBaseExpr",
     "TVMOperation",
+    "TVMGraph",
     "TVMOperator",
     "TVMOperators",
 ]
 
 import tvm
 import tvm.te as te
+import tvm.topi as topi
+
+TETensor: TypeAlias = Any  # Use instead of te.Tensor to avoids type errors
 
 
 def get_tvm_native_target_options() -> str:
@@ -71,18 +80,9 @@ def tvm_build_crt(
     return tvm.build(sch, operation, target=target, name=name, **runtime_kwargs)
 
 
-class TVMOperation:
-    def __init__(
-        self,
-        operator: Type["TVMOperator"],
-        args: tuple[Any, ...],
-        attrs: dict[str, Any] = {},
-        name: str | None = None,
-        target: str | None = None,
-    ) -> None:
-        self.operator = operator(args, attrs, name=name)
-        self.args = args
-        self.attrs = attrs
+class TVMBaseExpr(ABC):
+    def __init__(self, name: str | None = None, target: str | None = None) -> None:
+        self.name = name
         if target is not None:
             self.target_options = ""
             self.target = target
@@ -91,53 +91,35 @@ class TVMOperation:
             self.target = "llvm"
         self.tgt = tvm.target.Target(target=f"{self.target} {self.target_options}")
         self.dev = tvm.device(self.tgt.kind.name, 0)
-        self.name = self.operator.name if name is None else name
 
-    def generate(self) -> Any:
-        return self.operator.generate_op()
+    @abstractmethod
+    def generate(self) -> tuple[TETensor, ...]: ...
+    @abstractmethod
+    def schedule(
+        self, tensors: Sequence[TETensor], schedule: Any = None
+    ) -> te.Schedule: ...
+    @abstractmethod
+    def np_outputs_spec(self) -> list[dict[str, Any]]: ...
+    @abstractmethod
+    def np_inputs_spec(self) -> list[dict[str, Any]]: ...
 
-    def schedule(self, operation: Any, schedule: str = "") -> Any:
-        sch = te.create_schedule(operation[-1].op)
-        if schedule:
-            exec(schedule, {"sch": sch, "obj": operation}, {})
-        return sch
-
-    def build(self, operation: Any, sch: Any, func_name: str | None = None) -> Any:
+    def build(
+        self,
+        tensors: Sequence[TETensor],
+        sch: te.Schedule,
+        func_name: str | None = None,
+    ) -> Any:
         if func_name is None:
             func_name = self.name
         return tvm_build_crt(
             sch,
-            operation,
+            tensors,
             name=func_name,
             target=self.tgt,
         )
 
-    def lower(self, operation: Any, sch: Any) -> str:
-        return tvm.lower(sch, operation, simple_mode=True)
-
-    def np_inputs_spec(self) -> list[dict[str, Any]]:
-        inputs_spec = [
-            {
-                "shape": shape,
-                "dtype": dtype,
-            }
-            for shape, dtype in zip(
-                self.operator.inputs_dims(), self.operator.inputs_types()
-            )
-        ]
-        return inputs_spec
-
-    def np_outputs_spec(self) -> list[dict[str, Any]]:
-        outputs_spec = [
-            {
-                "shape": shape,
-                "dtype": dtype,
-            }
-            for shape, dtype in zip(
-                self.operator.outputs_dims(), self.operator.outputs_types()
-            )
-        ]
-        return outputs_spec
+    def lower(self, tensors: Sequence[TETensor], sch: te.Schedule) -> str:
+        return tvm.lower(sch, list(tensors), simple_mode=True)
 
     @classmethod
     def from_operation(cls, xtc_op: Operation, name: str | None) -> "TVMOperation":
@@ -151,6 +133,173 @@ class TVMOperation:
             dict(attrs),
             name=name,
         )
+
+    @classmethod
+    def from_graph(cls, xtc_graph: Graph) -> "TVMGraph":
+        return TVMGraph(xtc_graph)
+
+
+class TVMOperation(TVMBaseExpr):
+    def __init__(
+        self,
+        operator: Type["TVMOperator"],
+        args: tuple[Any, ...],
+        attrs: dict[str, Any] = {},
+        name: str | None = None,
+        target: str | None = None,
+    ) -> None:
+        super().__init__(name=name, target=target)
+        self.args = args
+        self.attrs = attrs
+        self.operator = operator(args, attrs, name=name)
+        self.name = self.operator.name if name is None else name
+
+    @override
+    def generate(self) -> tuple[Any, ...]:
+        return self.operator.generate_op()
+
+    @override
+    def schedule(
+        self, tensors: Sequence[TETensor], schedule: Any = None
+    ) -> te.Schedule:
+        sch = te.create_schedule(tensors[-1].op)
+        if schedule is None:
+            return sch
+        schedule_map = schedule.schedule_impl
+        tensors_map = {t.name: t for t in tensors}
+        for sched in schedule_map.values():
+            if sched:
+                exec(sched, {"sch": sch, "obj": tensors_map}, {})
+        return sch
+
+    @override
+    def np_inputs_spec(self) -> list[dict[str, Any]]:
+        inputs_spec = [
+            {
+                "shape": shape,
+                "dtype": dtype,
+            }
+            for shape, dtype in zip(
+                self.operator.inputs_dims(), self.operator.inputs_types()
+            )
+        ]
+        return inputs_spec
+
+    @override
+    def np_outputs_spec(self) -> list[dict[str, Any]]:
+        outputs_spec = [
+            {
+                "shape": shape,
+                "dtype": dtype,
+            }
+            for shape, dtype in zip(
+                self.operator.outputs_dims(), self.operator.outputs_types()
+            )
+        ]
+        return outputs_spec
+
+
+class TVMGraph(TVMBaseExpr):
+    def __init__(self, graph: Graph, target: str | None = None):
+        super().__init__(name=graph.name, target=target)
+        self._graph = graph
+        self._operations = {
+            node.name: TVMOperation.from_operation(node.operation, node.name)
+            for node in self._graph.nodes.values()
+        }
+        self._variables: dict[str, TETensor] = {}
+        self._params: dict[str, TETensor] = {}
+
+    def _te_shape_dtype_from_node(self, node: Node) -> Any:
+        if node.outputs_types is not None:
+            type = node.outputs_types[0]
+        else:
+            assert hasattr(node, "_expr")
+            type = node._expr.type  # type: ignore
+        return type.shape, type.dtype
+
+    def _te_tensor_from_node(self, node: Node) -> Any:
+        shape, dtype = self._te_shape_dtype_from_node(node)
+        return te.placeholder(
+            shape,
+            name=node.name,
+            dtype=dtype,
+        )
+
+    def _te_op_from_op(
+        self,
+        inputs: list[str],
+        outputs: list[str],
+        operation: TVMOperation,
+        variables: dict[str, Any],
+    ) -> tuple[TETensor, ...]:
+        assert len(outputs) == 1
+        in_outs = operation.operator.generate_op([variables[name] for name in inputs])
+        variables[outputs[0]] = in_outs[-1]
+        return in_outs
+
+    def _te_expr_from_graph(self) -> tuple[dict[str, TETensor], dict[str, TETensor]]:
+        inputs = {
+            node.name: self._te_tensor_from_node(node)
+            for node in self._graph.inputs_nodes
+        }
+        variables = {**inputs}
+        for node, operation in zip(
+            self._graph.nodes.values(), self._operations.values()
+        ):
+            self._te_op_from_op(node.inputs, node.outputs, operation, variables)
+        params = {
+            name: variables[name]
+            for name in [*self._graph.inputs, *self._graph.outputs]
+        }
+        return variables, params
+
+    @override
+    def generate(self) -> tuple[TETensor, ...]:
+        self._variables, self._params = self._te_expr_from_graph()
+        return tuple(self._params.values())
+
+    @override
+    def schedule(
+        self, tensors: Sequence[TETensor], schedule: Any = None
+    ) -> te.Schedule:
+        sch = te.create_schedule(tensors[-1].op)
+        if schedule is None:
+            return sch
+        schedule_map = schedule.schedule_impl
+        tensors_map = {t.name: t for t in self._variables.values()}
+        for sched in schedule_map.values():
+            if sched:
+                exec(sched, {"sch": sch, "obj": tensors_map}, {})
+        return sch
+
+    @override
+    def np_inputs_spec(self) -> list[dict[str, Any]]:
+        inputs_spec = [
+            {
+                "shape": shape,
+                "dtype": dtype,
+            }
+            for shape, dtype in [
+                self._te_shape_dtype_from_node(node)
+                for node in self._graph.inputs_nodes
+            ]
+        ]
+        return inputs_spec
+
+    @override
+    def np_outputs_spec(self) -> list[dict[str, Any]]:
+        outputs_spec = [
+            {
+                "shape": shape,
+                "dtype": dtype,
+            }
+            for shape, dtype in [
+                self._te_shape_dtype_from_node(node)
+                for node in self._graph.outputs_nodes
+            ]
+        ]
+        return outputs_spec
 
 
 class TVMOperator(ABC):
@@ -166,7 +315,9 @@ class TVMOperator(ABC):
         self.name = name if name is not None else self.DEFAULT_NAME
 
     @abstractmethod
-    def generate_op(self): ...
+    def generate_op(
+        self, inputs: Sequence[TETensor] | None = None
+    ) -> tuple[TETensor, ...]: ...
     @abstractmethod
     def dims(self, kind: str = "") -> tuple[str, ...]: ...
     @abstractmethod
@@ -201,10 +352,15 @@ class TVMOperatorMatmul(TVMOperator):
         return {"i": i, "j": j, "k": k}
 
     @override
-    def generate_op(self) -> Any:
+    def generate_op(
+        self, inputs: Sequence[TETensor] | None = None
+    ) -> tuple[TETensor, ...]:
         Ki, Kj, Kk, dtype = self.args
-        A = te.placeholder((Ki, Kk), name="A", dtype=dtype)
-        B = te.placeholder((Kk, Kj), name="B", dtype=dtype)
+        if inputs is None:
+            A = te.placeholder((Ki, Kk), name="A", dtype=dtype)
+            B = te.placeholder((Kk, Kj), name="B", dtype=dtype)
+        else:
+            A, B = inputs
         k = te.reduce_axis((0, Kk), "k")
         O = te.compute(
             (Ki, Kj),
@@ -261,14 +417,26 @@ class TVMOperatorRelu(TVMOperator):
         return {"i": i}
 
     @override
-    def generate_op(self) -> Any:
+    def generate_op(
+        self, inputs: Sequence[TETensor] | None = None
+    ) -> tuple[TETensor, ...]:
         Ki, dtype = self.args
-        A = te.placeholder((Ki,), name="A", dtype=dtype)
+        if inputs is None:
+            A = te.placeholder((Ki,), name="A", dtype=dtype)
+        else:
+            (A,) = inputs
+        shape = tuple(A.shape)
+        size = mulall(A.shape)
+        newshape = (size,)
+        if shape != newshape:
+            A = topi.reshape(A, newshape=(size,))
         O = te.compute(
             (Ki,),
             lambda i,: tvm.tir.max(self.attrs["threshold"], A[i]),
             name=self.name,
         )
+        if shape != newshape:
+            O = topi.reshape(O, newshape=shape)
         return A, O
 
     @override
@@ -315,11 +483,16 @@ class TVMOperatorConv2D(TVMOperator):
         return {"b": b, "h": h, "w": w, "f": f, "r": r, "s": s, "c": c}
 
     @override
-    def generate_op(self) -> Any:
+    def generate_op(
+        self, inputs: Sequence[TETensor] | None = None
+    ) -> tuple[TETensor, ...]:
         Kb, Kh, Kw, Kf, Kr, Ks, Kc, dtype = self.args
         inps_dims = self.inputs_dims()
-        A = te.placeholder(inps_dims[0], name="A", dtype=dtype)
-        W = te.placeholder(inps_dims[1], name="W", dtype=dtype)
+        if inputs is None:
+            A = te.placeholder(inps_dims[0], name="A", dtype=dtype)
+            W = te.placeholder(inps_dims[1], name="W", dtype=dtype)
+        else:
+            A, W = inputs
         r = te.reduce_axis((0, Kr), "r")
         s = te.reduce_axis((0, Ks), "s")
         c = te.reduce_axis((0, Kc), "c")

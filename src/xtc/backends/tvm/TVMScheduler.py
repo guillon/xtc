@@ -11,16 +11,25 @@ from copy import deepcopy
 import xtc.backends.tvm as backend
 import xtc.itf as itf
 
-
-# Actual backend Schedule implementation is the string
-# for the TVM schedule
-ScheduleImpl: TypeAlias = str
+# Actual backend Schedule implementation is a mapping
+# from op name to the TVM schedule string
+ScheduleImpl: TypeAlias = dict[str, str]
 
 
 class TVMScheduler(itf.schd.Scheduler):
-    def __init__(self, backend: "backend.TVMBackend") -> None:
-        self.dims: dict[str, int] = {**backend.dims}
-        self.parallel_dims: list[str] = [*backend.parallel_dims]
+    def __init__(
+        self,
+        backend: "backend.TVMBackend",
+        nodes: list[str] | None = None,
+    ) -> None:
+        self._backend = backend
+        if nodes is None:
+            self._op = list(backend._ops.values())[-1]
+        else:
+            self._op = backend._ops[nodes[-1]]
+        self.dims = self._op.operator.dims_sizes()
+        self.parallel_dims = self._op.operator.dims("P")
+        self.reduction_dims = self._op.operator.dims("R")
         self.tiles: dict[str, dict[str, int]] = {
             k: {k: v} for k, v in self.dims.items()
         }
@@ -30,7 +39,6 @@ class TVMScheduler(itf.schd.Scheduler):
         self.unrolling: dict[str, int] = {}
         self.write_caches: list[str] = []
         self._update_loops()
-        self._backend = backend
 
     @property
     @override
@@ -41,7 +49,9 @@ class TVMScheduler(itf.schd.Scheduler):
     def schedule(self) -> itf.schd.Schedule:
         io = StringIO()
         self._dump_tvm_schedule(outf=io)
-        schedule_impl = io.getvalue()
+        sched = io.getvalue()
+        assert self._op.name is not None
+        schedule_impl = {self._op.name: sched}
         return TVMSchedule(scheduler=self, schedule_impl=schedule_impl)
 
     def _update_loops(self):
@@ -203,7 +213,7 @@ class TVMScheduler(itf.schd.Scheduler):
         tilings = self._full_write_buffers()
         for tens, parent, _ in tilings:
             if not parent:
-                print(f"{tens} = {obj}[-1]", file=outf)
+                print(f"{tens} = {obj}['{self._op.name}']", file=outf)
             else:
                 print(f'{tens} = {sch}.cache_write({parent}, "local")', file=outf)
         for idx, ((tens, parent, axis), tiles) in enumerate(tilings.items()):
@@ -265,4 +275,4 @@ class TVMSchedule(itf.schd.Schedule):
 
     @override
     def __str__(self) -> str:
-        return str(self._schedule_impl)
+        return "\n".join(self._schedule_impl.values())

@@ -45,17 +45,17 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
 # CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(A: T.Buffer((1, 10, 10, 3), "float32"), W: T.Buffer((3, 3, 3, 16), "float32"), O: T.Buffer((1, 8, 8, 16), "float32")):
+# CHECK-NEXT:      def main(_0: T.Buffer((1, 10, 10, 3), "float32"), _1: T.Buffer((3, 3, 3, 16), "float32"), O: T.Buffer((1, 8, 8, 16), "float32")):
 # CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
 # CHECK-NEXT:          for h, w, f in T.grid(8, 8, 16):
 # CHECK-NEXT:              O_1 = T.Buffer((1024,), data=O.data)
 # CHECK-NEXT:              O_1[h * 128 + w * 16 + f] = T.float32(0.0)
 # CHECK-NEXT:              for r, s, c in T.grid(3, 3, 3):
 # CHECK-NEXT:                  cse_var_1: T.int32 = h * 128 + w * 16 + f
-# CHECK-NEXT:                  A_1 = T.Buffer((300,), data=A.data)
-# CHECK-NEXT:                  W_1 = T.Buffer((432,), data=W.data)
-# CHECK-NEXT:                  O_1[cse_var_1] = O_1[cse_var_1] + A_1[h * 30 + r * 30 + w * 3 + s * 3 + c] * W_1[r * 144 + s * 48 + c * 16 + f]
-# CHECK-NEXT:  O = obj[-1]
+# CHECK-NEXT:                  _0_1 = T.Buffer((300,), data=_0.data)
+# CHECK-NEXT:                  _1_1 = T.Buffer((432,), data=_1.data)
+# CHECK-NEXT:                  O_1[cse_var_1] = O_1[cse_var_1] + _0_1[h * 30 + r * 30 + w * 3 + s * 3 + c] * _1_1[r * 144 + s * 48 + c * 16 + f]
+# CHECK-NEXT:  O = obj['O']
 # CHECK-NEXT:  b, h, w, f, = O.op.axis
 # CHECK-NEXT:  r, s, c, = O.op.reduce_axis
 # CHECK-NEXT:  sch[O].reorder(b, h, w, f, r, s, c)
@@ -66,14 +66,14 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
 # CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(A: T.Buffer((1, 10, 10, 3), "float32"), W: T.Buffer((3, 3, 3, 16), "float32"), O: T.Buffer((1, 8, 8, 16), "float32")):
+# CHECK-NEXT:      def main(_0: T.Buffer((1, 10, 10, 3), "float32"), _1: T.Buffer((3, 3, 3, 16), "float32"), O: T.Buffer((1, 8, 8, 16), "float32")):
 # CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
 # CHECK-NEXT:          for h, w, f in T.grid(8, 8, 16):
 # CHECK-NEXT:              O_1 = T.Buffer((1024,), data=O.data)
 # CHECK-NEXT:              O_1[h * 128 + w * 16 + f] = T.float32(0.0)
 # CHECK-NEXT:              for r, s, c in T.grid(3, 3, 3):
 # CHECK-NEXT:                  cse_var_1: T.int32 = h * 128 + w * 16 + f
-# CHECK-NEXT:                  A_1 = T.Buffer((300,), data=A.data)
-# CHECK-NEXT:                  W_1 = T.Buffer((432,), data=W.data)
-# CHECK-NEXT:                  O_1[cse_var_1] = O_1[cse_var_1] + A_1[h * 30 + r * 30 + w * 3 + s * 3 + c] * W_1[r * 144 + s * 48 + c * 16 + f]
+# CHECK-NEXT:                  _0_1 = T.Buffer((300,), data=_0.data)
+# CHECK-NEXT:                  _1_1 = T.Buffer((432,), data=_1.data)
+# CHECK-NEXT:                  O_1[cse_var_1] = O_1[cse_var_1] + _0_1[h * 30 + r * 30 + w * 3 + s * 3 + c] * _1_1[r * 144 + s * 48 + c * 16 + f]
 # CHECK-NEXT:  CODE: 0
