@@ -198,7 +198,6 @@ def compile_one(
     compile_args = dict(
         shared_lib=True,
         dump_file=dump_file,
-        no_entry=True,
         bare_ptr=args.bare_ptr,
         debug=args.debug_compile,
     )
