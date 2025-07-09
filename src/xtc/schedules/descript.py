@@ -7,6 +7,8 @@ from dataclasses import dataclass
 import re
 from xtc.itf.schd.scheduler import Scheduler
 
+SchedDict = dict[str, Any]
+
 
 def descript_scheduler(
     scheduler: Scheduler,
@@ -24,27 +26,29 @@ class Descript:
     abstract_axis: list[str]
 
     def apply(self, node_name: str, spec: dict[str, dict]):
-        flattened_schedule = self._flatten_schedule(root=node_name, spec=spec)
-
-        for interchange in flattened_schedule["interchanges"]:
-            self.scheduler.interchange(interchange)
-        for d, s in flattened_schedule["splits"].items():
-            self.scheduler.split(d, s)
-        for d, s in flattened_schedule["tiles"].items():
-            self.scheduler.tile(d, s)
-        self.scheduler.vectorize(flattened_schedule["vectorize"])
-        self.scheduler.parallelize(flattened_schedule["parallelize"])
-        self.scheduler.unroll(flattened_schedule["unroll"])
+        flat_schedules = self._flatten_schedule(root=node_name, spec=spec)
+        for schedule in flat_schedules:
+            root = schedule["root"]
+            self.scheduler.interchange(schedule["interchange"], root=root)
+            for d, s in schedule["splits"].items():
+                self.scheduler.split(d, s, root=root)
+            for d, s in schedule["tiles"].items():
+                self.scheduler.tile(d, s, root=root)
+            self.scheduler.vectorize(schedule["vectorize"], root=root)
+            self.scheduler.parallelize(schedule["parallelize"], root=root)
+            self.scheduler.unroll(schedule["unroll"], root=root)
 
     def _flatten_schedule(
         self,
         root: str,
         spec: dict[str, dict],
-    ) -> dict[str, Any]:
-        sched = {
-            "splits": {a: {} for a in self.abstract_axis},
+    ) -> list[SchedDict]:
+        recursive_scheds: list[SchedDict] = []
+        sched: SchedDict = {
+            "root": root,
+            "splits": {},
             "tiles": {a: {} for a in self.abstract_axis},
-            "interchanges": [],
+            "interchange": [],
             "vectorize": [],
             "parallelize": [],
             "unroll": {},
@@ -52,7 +56,7 @@ class Descript:
         # State of the schedule
         sizes: dict[str, int | None] = {}
         previous_cut: dict[str, int | None] = {a: 0 for a in self.abstract_axis}
-        interchange: list[str] = [root]
+        interchange: list[str] = []
         # Processing the schedule
         for declaration, val in spec.items():
             # Splits
@@ -69,59 +73,65 @@ class Descript:
                 # Update the previous cut
                 previous_cut[axis_name] = y
                 # Save the cutting points of the new dimensions
+                if not axis_name in sched["splits"]:
+                    sched["splits"][axis_name] = {}
                 new_dim_index = len(sched["splits"][axis_name])
-                new_dim_name = f"{root}/{axis_name}[{new_dim_index}]"
+                new_dim_name = f"{axis_name}[{new_dim_index}]"
+                new_root_name = f"{root}/{new_dim_name}"
                 sched["splits"][axis_name][new_dim_name] = x
                 interchange.append(new_dim_name)
                 # Fetch the schedule associated with the new dimension
                 next_schedule = val
                 assert isinstance(next_schedule, dict)
-                inner_sched = self._flatten_schedule(
-                    spec=next_schedule, root=new_dim_name
+                inner_scheds = self._flatten_schedule(
+                    spec=next_schedule, root=new_root_name
                 )
-                sched = merge_flat_schedules(sched, inner_sched)
+                recursive_scheds += inner_scheds
                 continue
 
             # Tiles
-            if "#" in declaration:
+            elif "#" in declaration:
                 axis_name, tile_size = declaration.split("#")
                 loop_size = int(tile_size)
                 tile_num = len(sched["tiles"][axis_name])
-                loop_name = f"{root}/{axis_name}{tile_num}"
+                loop_name = f"{axis_name}{tile_num}"
                 sched["tiles"][axis_name][loop_name] = loop_size
+                sizes[loop_name] = loop_size
+                interchange.append(loop_name)
 
-            # Initial dimensions
             elif declaration in self.abstract_axis:
-                axis_name = declaration
-                loop_size = 1
-                tile_num = len(sched["tiles"][axis_name])
-                loop_name = f"{root}/{axis_name}{tile_num}"
-                sched["tiles"][axis_name][loop_name] = loop_size
+                loop_name = declaration
+                interchange.append(loop_name)
+
             else:
-                raise Exception(f"Unknown declaration: {declaration}")
+                assert False
 
-            sizes[loop_name] = loop_size
-            # Build the interchange
-            interchange.append(loop_name)
-            # Annotations
-            assert isinstance(val, dict)
-            for instr, param in val.items():
-                assert isinstance(instr, str)
-                assert isinstance(param, int | None)
-                match instr:
-                    case "unroll":
-                        ufactor = sizes[loop_name] if param is None else param
-                        assert isinstance(ufactor, int)
-                        sched["unroll"][loop_name] = ufactor
-                    case "vectorize":
-                        sched["vectorize"].append(loop_name)
-                    case "parallelize":
-                        sched["parallelize"].append(loop_name)
-                    case _:
-                        raise Exception(f"Unknown annotation on {loop_name}: {instr}")
+            annotate(loop_name=loop_name, sizes=sizes, annotations=val, sched=sched)
+        #
+        sched["interchange"] = interchange
+        return [sched] + recursive_scheds
 
-        sched["interchanges"] = [interchange] + sched["interchanges"]
-        return sched
+
+def annotate(
+    loop_name: str,
+    sizes: dict[str, int | None],
+    annotations: dict[str, Any],
+    sched: dict[str, Any],
+):
+    for instr, param in annotations.items():
+        assert isinstance(instr, str)
+        assert isinstance(param, int | None)
+        match instr:
+            case "unroll":
+                ufactor = sizes[loop_name] if param is None else param
+                assert isinstance(ufactor, int)
+                sched["unroll"][loop_name] = ufactor
+            case "vectorize":
+                sched["vectorize"].append(loop_name)
+            case "parallelize":
+                sched["parallelize"].append(loop_name)
+            case _:
+                raise Exception(f"Unknown annotation on {loop_name}: {instr}")
 
 
 def parse_split_declaration(declaration: str) -> Tuple[str, int | None, int | None]:
@@ -133,25 +143,3 @@ def parse_split_declaration(declaration: str) -> Tuple[str, int | None, int | No
     x = int(x_str) if x_str else None
     y = int(y_str) if y_str else None
     return prefix, x, y
-
-
-def merge_flat_schedules(
-    sched1: dict[str, Any],
-    sched2: dict[str, Any],
-) -> dict[str, Any]:
-    result = {
-        "splits": sched1["splits"],  # tmp
-        "tiles": sched1["tiles"],  # tmp
-        "interchanges": sched1["interchanges"] + sched2["interchanges"],
-        "vectorize": list(set(sched1["vectorize"] + sched2["vectorize"])),
-        "parallelize": list(set(sched1["parallelize"] + sched2["parallelize"])),
-        "unroll": sched1["unroll"] | sched2["unroll"],
-    }
-    for d in sched2["splits"]:
-        for t in sched2["splits"][d]:
-            result["splits"][d][t] = sched2["splits"][d][t]
-
-    for d in sched2["tiles"]:
-        for t in sched2["tiles"][d]:
-            result["tiles"][d][t] = sched2["tiles"][d][t]
-    return result

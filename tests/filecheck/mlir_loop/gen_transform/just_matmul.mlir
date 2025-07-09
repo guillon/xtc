@@ -16,6 +16,10 @@ func.func @myfun(
 // CHECK-NEXT:      linalg.matmul ins(%arg0, %arg1 : memref<256x512xf32>, memref<512x256xf32>) outs(%arg2 : memref<256x256xf32>)
 // CHECK-NEXT:      return
 // CHECK-NEXT:    }
+// CHECK-NEXT:    transform.named_sequence @_vecto(%arg0: !transform.any_op {transform.consumed}) {
+// CHECK-NEXT:      transform.structured.vectorize %arg0 : !transform.any_op
+// CHECK-NEXT:      transform.yield 
+// CHECK-NEXT:    }
 // CHECK-NEXT:    transform.named_sequence @__transform_main(%arg0: !transform.any_op {transform.readonly}) {
 // CHECK-NEXT:      transform.yield 
 // CHECK-NEXT:    }

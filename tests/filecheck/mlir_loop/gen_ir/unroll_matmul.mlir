@@ -65,9 +65,9 @@ func.func @myfun(
 // CHECK-NEXT:            %subview_21 = memref.subview %subview_6[%5, 0] [1, 1] [1, 1] : memref<512x1xf32, strided<[256, 1], offset: ?>> to memref<1x1xf32, strided<[256, 1], offset: ?>>
 // CHECK-NEXT:            %subview_22 = memref.subview %subview_7[0, 0] [1, 1] [1, 1] : memref<1x1xf32, strided<[256, 1], offset: ?>> to memref<1x1xf32, strided<[256, 1], offset: ?>>
 // CHECK-NEXT:            linalg.matmul {__node0__} ins(%subview_20, %subview_21 : memref<1x1xf32, strided<[512, 1], offset: ?>>, memref<1x1xf32, strided<[256, 1], offset: ?>>) outs(%subview_22 : memref<1x1xf32, strided<[256, 1], offset: ?>>)
-// CHECK-NEXT:          } {"__node0__/K0"}
-// CHECK-NEXT:        } {"__node0__/J0"}
-// CHECK-NEXT:      } {"__node0__/I0"}
+// CHECK-NEXT:          } {"__node0__/K"}
+// CHECK-NEXT:        } {"__node0__/J"}
+// CHECK-NEXT:      } {"__node0__/I"}
 // CHECK-NEXT:      return
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }

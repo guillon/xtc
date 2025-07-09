@@ -45,31 +45,37 @@ print(f"CODE: {res}")
 # CHECK-NEXT:      }
 # CHECK-NEXT:      return
 # CHECK-NEXT:    }
+# CHECK-NEXT:    transform.named_sequence @_vecto(%arg0: !transform.any_op {transform.consumed}) {
+# CHECK-NEXT:      transform.structured.vectorize %arg0 : !transform.any_op
+# CHECK-NEXT:      transform.yield 
+# CHECK-NEXT:    }
 # CHECK-NEXT:    transform.named_sequence @__transform_main(%arg0: !transform.any_op {transform.readonly}) {
 # CHECK-NEXT:      %0 = transform.structured.match attributes {__xtc_id_O_0_} in %arg0 : (!transform.any_op) -> !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op, %loops = transform.structured.tile_using_for %0 tile_sizes [1, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops "b" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops "./b" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_0, %loops_1 = transform.structured.tile_using_for %tiled_linalg_op tile_sizes [0, 1, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_1 "h" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_1 "./h" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_2, %loops_3 = transform.structured.tile_using_for %tiled_linalg_op_0 tile_sizes [0, 0, 1, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_3 "w" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_3 "./w" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_4, %loops_5 = transform.structured.tile_using_for %tiled_linalg_op_2 tile_sizes [0, 0, 0, 1] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_5 "f" : !transform.any_op
-# CHECK-NEXT:      %1 = transform.structured.match attributes {__xtc_id_O_} in %arg0 : (!transform.any_op) -> !transform.any_op
-# CHECK-NEXT:      %tiled_linalg_op_6, %loops_7 = transform.structured.tile_using_for %1 tile_sizes [1, 0, 0, 0, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_7 "b" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_5 "./f" : !transform.any_op
+# CHECK-NEXT:      %1 = transform.get_parent_op %loops {isolated_from_above} : (!transform.any_op) -> !transform.any_op
+# CHECK-NEXT:      %2 = transform.structured.match attributes {__xtc_id_O_} in %arg0 : (!transform.any_op) -> !transform.any_op
+# CHECK-NEXT:      %tiled_linalg_op_6, %loops_7 = transform.structured.tile_using_for %2 tile_sizes [1, 0, 0, 0, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
+# CHECK-NEXT:      transform.annotate %loops_7 "./b" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_8, %loops_9 = transform.structured.tile_using_for %tiled_linalg_op_6 tile_sizes [0, 1, 0, 0, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_9 "h" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_9 "./h" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_10, %loops_11 = transform.structured.tile_using_for %tiled_linalg_op_8 tile_sizes [0, 0, 1, 0, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_11 "w" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_11 "./w" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_12, %loops_13 = transform.structured.tile_using_for %tiled_linalg_op_10 tile_sizes [0, 0, 0, 1, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_13 "f" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_13 "./f" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_14, %loops_15 = transform.structured.tile_using_for %tiled_linalg_op_12 tile_sizes [0, 0, 0, 0, 1, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_15 "r" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_15 "./r" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_16, %loops_17 = transform.structured.tile_using_for %tiled_linalg_op_14 tile_sizes [0, 0, 0, 0, 0, 1, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_17 "s" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_17 "./s" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_18, %loops_19 = transform.structured.tile_using_for %tiled_linalg_op_16 tile_sizes [0, 0, 0, 0, 0, 0, 1] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_19 "c" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_19 "./c" : !transform.any_op
+# CHECK-NEXT:      %3 = transform.get_parent_op %loops_7 {isolated_from_above} : (!transform.any_op) -> !transform.any_op
 # CHECK-NEXT:      transform.yield 
 # CHECK-NEXT:    }
 # CHECK-NEXT:  }
@@ -102,10 +108,10 @@ print(f"CODE: {res}")
 # CHECK-NEXT:            scf.for %arg6 = %c0_11 to %c16 step %c1_12 {
 # CHECK-NEXT:              %subview_13 = memref.subview %subview_10[0, 0, 0, %arg6] [1, 1, 1, 1] [1, 1, 1, 1] : memref<1x1x1x16xf32, strided<[1024, 128, 16, 1], offset: ?>> to memref<1x1x1x1xf32, strided<[1024, 128, 16, 1], offset: ?>>
 # CHECK-NEXT:              linalg.fill {__xtc_id_O_0_} ins(%cst : f32) outs(%subview_13 : memref<1x1x1x1xf32, strided<[1024, 128, 16, 1], offset: ?>>)
-# CHECK-NEXT:            } {f}
-# CHECK-NEXT:          } {w}
-# CHECK-NEXT:        } {h}
-# CHECK-NEXT:      } {b}
+# CHECK-NEXT:            } {"./f"}
+# CHECK-NEXT:          } {"./w"}
+# CHECK-NEXT:        } {"./h"}
+# CHECK-NEXT:      } {"./b"}
 # CHECK-NEXT:      %c0_1 = arith.constant 0 : index
 # CHECK-NEXT:      %c1_2 = arith.constant 1 : index
 # CHECK-NEXT:      %c1_3 = arith.constant 1 : index
@@ -161,13 +167,13 @@ print(f"CODE: {res}")
 # CHECK-NEXT:                      %1 = arith.addf %out, %0 : f32
 # CHECK-NEXT:                      linalg.yield %1 : f32
 # CHECK-NEXT:                    }
-# CHECK-NEXT:                  } {c}
-# CHECK-NEXT:                } {s}
-# CHECK-NEXT:              } {r}
-# CHECK-NEXT:            } {f}
-# CHECK-NEXT:          } {w}
-# CHECK-NEXT:        } {h}
-# CHECK-NEXT:      } {b}
+# CHECK-NEXT:                  } {"./c"}
+# CHECK-NEXT:                } {"./s"}
+# CHECK-NEXT:              } {"./r"}
+# CHECK-NEXT:            } {"./f"}
+# CHECK-NEXT:          } {"./w"}
+# CHECK-NEXT:        } {"./h"}
+# CHECK-NEXT:      } {"./b"}
 # CHECK-NEXT:      return
 # CHECK-NEXT:    }
 # CHECK-NEXT:  }

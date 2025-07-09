@@ -52,8 +52,8 @@ func.func @myfun(
 // CHECK-NEXT:            %subview_19 = memref.subview %subview_13[%arg5, 0] [1, 1] [1, 1] : memref<512x1xf32, strided<[256, 1], offset: ?>> to memref<1x1xf32, strided<[256, 1], offset: ?>>
 // CHECK-NEXT:            %subview_20 = memref.subview %subview_14[0, 0] [1, 1] [1, 1] : memref<1x1xf32, strided<[256, 1], offset: ?>> to memref<1x1xf32, strided<[256, 1], offset: ?>>
 // CHECK-NEXT:            linalg.matmul {__node0__} ins(%subview_18, %subview_19 : memref<1x1xf32, strided<[512, 1], offset: ?>>, memref<1x1xf32, strided<[256, 1], offset: ?>>) outs(%subview_20 : memref<1x1xf32, strided<[256, 1], offset: ?>>)
-// CHECK-NEXT:          } {"__node0__/J[0]/K0"}
-// CHECK-NEXT:        } {"__node0__/J[0]/J0"}
+// CHECK-NEXT:          } {"__node0__/J[0]/K"}
+// CHECK-NEXT:        } {"__node0__/J[0]/J"}
 // CHECK-NEXT:        %subview_7 = memref.subview %subview[0, 0] [1, 512] [1, 1] : memref<1x512xf32, strided<[512, 1], offset: ?>> to memref<1x512xf32, strided<[512, 1], offset: ?>>
 // CHECK-NEXT:        %subview_8 = memref.subview %subview_0[0, 128] [512, 128] [1, 1] : memref<512x256xf32, strided<[256, 1]>> to memref<512x128xf32, strided<[256, 1], offset: 128>>
 // CHECK-NEXT:        %subview_9 = memref.subview %subview_1[0, 128] [1, 128] [1, 1] : memref<1x256xf32, strided<[256, 1], offset: ?>> to memref<1x128xf32, strided<[256, 1], offset: ?>>
@@ -72,9 +72,9 @@ func.func @myfun(
 // CHECK-NEXT:            %subview_19 = memref.subview %subview_13[0, %arg5] [1, 1] [1, 1] : memref<1x128xf32, strided<[256, 1], offset: ?>> to memref<1x1xf32, strided<[256, 1], offset: ?>>
 // CHECK-NEXT:            %subview_20 = memref.subview %subview_14[0, %arg5] [1, 1] [1, 1] : memref<1x128xf32, strided<[256, 1], offset: ?>> to memref<1x1xf32, strided<[256, 1], offset: ?>>
 // CHECK-NEXT:            linalg.matmul {__node0__} ins(%subview_18, %subview_19 : memref<1x1xf32, strided<[512, 1], offset: ?>>, memref<1x1xf32, strided<[256, 1], offset: ?>>) outs(%subview_20 : memref<1x1xf32, strided<[256, 1], offset: ?>>)
-// CHECK-NEXT:          } {"__node0__/J[1]/J0"}
-// CHECK-NEXT:        } {"__node0__/J[1]/K0"}
-// CHECK-NEXT:      } {"__node0__/I0"}
+// CHECK-NEXT:          } {"__node0__/J[1]/J"}
+// CHECK-NEXT:        } {"__node0__/J[1]/K"}
+// CHECK-NEXT:      } {"__node0__/I"}
 // CHECK-NEXT:      return
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }

@@ -51,38 +51,54 @@ print(f"CODE: {res}")
 # CHECK-NEXT:      }
 # CHECK-NEXT:      return
 # CHECK-NEXT:    }
+# CHECK-NEXT:    transform.named_sequence @_vecto(%arg0: !transform.any_op {transform.consumed}) {
+# CHECK-NEXT:      transform.structured.vectorize %arg0 : !transform.any_op
+# CHECK-NEXT:      transform.yield 
+# CHECK-NEXT:    }
 # CHECK-NEXT:    transform.named_sequence @__transform_main(%arg0: !transform.any_op {transform.readonly}) {
 # CHECK-NEXT:      %0 = transform.structured.match attributes {__xtc_id_O_0_} in %arg0 : (!transform.any_op) -> !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op, %loops = transform.structured.tile_using_for %0 tile_sizes [1, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops "b" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops "./b" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_0, %loops_1 = transform.structured.tile_using_for %tiled_linalg_op tile_sizes [0, 1, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_1 "h" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_1 "./h" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_2, %loops_3 = transform.structured.tile_using_for %tiled_linalg_op_0 tile_sizes [0, 0, 1, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_3 "w" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_3 "./w" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_4, %loops_5 = transform.structured.tile_using_for %tiled_linalg_op_2 tile_sizes [0, 0, 0, 1] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_5 "f" : !transform.any_op
-# CHECK-NEXT:      %1 = transform.structured.match attributes {__xtc_id_O_} in %arg0 : (!transform.any_op) -> !transform.any_op
-# CHECK-NEXT:      %tiled_linalg_op_6, %loops_7 = transform.structured.tile_using_for %1 tile_sizes [1, 0, 0, 0, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_7 "b" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_5 "./f" : !transform.any_op
+# CHECK-NEXT:      %1 = transform.get_parent_op %loops {isolated_from_above} : (!transform.any_op) -> !transform.any_op
+# CHECK-NEXT:      %2 = transform.structured.match attributes {__xtc_id_O_} in %arg0 : (!transform.any_op) -> !transform.any_op
+# CHECK-NEXT:      %tiled_linalg_op_6, %loops_7 = transform.structured.tile_using_for %2 tile_sizes [1, 0, 0, 0, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
+# CHECK-NEXT:      transform.annotate %loops_7 "./b" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_8, %loops_9 = transform.structured.tile_using_for %tiled_linalg_op_6 tile_sizes [0, 1, 0, 0, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_9 "h" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_9 "./h" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_10, %loops_11 = transform.structured.tile_using_for %tiled_linalg_op_8 tile_sizes [0, 0, 4, 0, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_11 "w" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_11 "./w" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_12, %loops_13 = transform.structured.tile_using_for %tiled_linalg_op_10 tile_sizes [0, 0, 0, 16, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_13 "f" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_13 "./f" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_14, %loops_15 = transform.structured.tile_using_for %tiled_linalg_op_12 tile_sizes [0, 0, 0, 0, 1, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_15 "r" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_15 "./r" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_16, %loops_17 = transform.structured.tile_using_for %tiled_linalg_op_14 tile_sizes [0, 0, 0, 0, 0, 1, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_17 "s" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_17 "./s" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_18, %loops_19 = transform.structured.tile_using_for %tiled_linalg_op_16 tile_sizes [0, 0, 0, 0, 0, 0, 1] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_19 "c" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_19 "./c" : !transform.any_op
 # CHECK-NEXT:      %tiled_linalg_op_20, %loops_21 = transform.structured.tile_using_for %tiled_linalg_op_18 tile_sizes [0, 0, 1, 0, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-# CHECK-NEXT:      transform.annotate %loops_21 "w1" : !transform.any_op
+# CHECK-NEXT:      transform.annotate %loops_21 "./w1" : !transform.any_op
+# CHECK-NEXT:      %3 = transform.get_parent_op %loops_7 {isolated_from_above} : (!transform.any_op) -> !transform.any_op
+# CHECK-NEXT:      transform.apply_patterns to %3 {
+# CHECK-NEXT:        transform.apply_patterns.vector.reduction_to_contract
+# CHECK-NEXT:        transform.apply_patterns.vector.transfer_permutation_patterns
+# CHECK-NEXT:      } : !transform.any_op
+# CHECK-NEXT:      transform.apply_patterns to %3 {
+# CHECK-NEXT:        transform.apply_patterns.vector.lower_outerproduct
+# CHECK-NEXT:        transform.apply_patterns.vector.lower_contraction
+# CHECK-NEXT:      } : !transform.any_op
+# CHECK-NEXT:      %4 = transform.structured.match attributes {"./w1"} in %3 : (!transform.any_op) -> !transform.any_op
 # CHECK-NEXT:      transform.loop.unroll %loops_21 {factor = 4 : i64} : !transform.any_op
+# CHECK-NEXT:      %5 = transform.structured.match attributes {"./c"} in %3 : (!transform.any_op) -> !transform.any_op
 # CHECK-NEXT:      transform.loop.unroll %loops_19 {factor = 3 : i64} : !transform.any_op
-# CHECK-NEXT:      %2 = transform.get_parent_op %loops_7 {isolated_from_above} : (!transform.any_op) -> !transform.any_op
-# CHECK-NEXT:      %3 = transform.apply_registered_pass "convert-linalg-to-affine-loops" to %2 : (!transform.any_op) -> !transform.any_op
-# CHECK-NEXT:      %4 = transform.apply_registered_pass "affine-super-vectorize" to %3 {options = "virtual-vector-size=16"} : (!transform.any_op) -> !transform.any_op
+# CHECK-NEXT:      %6 = transform.get_parent_op %loops_7 {isolated_from_above} : (!transform.any_op) -> !transform.any_op
+# CHECK-NEXT:      %7 = transform.apply_registered_pass "convert-linalg-to-affine-loops" to %6 : (!transform.any_op) -> !transform.any_op
+# CHECK-NEXT:      %8 = transform.apply_registered_pass "affine-super-vectorize" to %7 {options = "virtual-vector-size=16"} : (!transform.any_op) -> !transform.any_op
 # CHECK-NEXT:      transform.yield 
 # CHECK-NEXT:    }
 # CHECK-NEXT:  }
@@ -120,10 +136,10 @@ print(f"CODE: {res}")
 # CHECK-NEXT:                  }
 # CHECK-NEXT:                }
 # CHECK-NEXT:              }
-# CHECK-NEXT:            } {f}
-# CHECK-NEXT:          } {w}
-# CHECK-NEXT:        } {h}
-# CHECK-NEXT:      } {b}
+# CHECK-NEXT:            } {"./f"}
+# CHECK-NEXT:          } {"./w"}
+# CHECK-NEXT:        } {"./h"}
+# CHECK-NEXT:      } {"./b"}
 # CHECK-NEXT:      scf.for %arg3 = %c0 to %c1 step %c1 {
 # CHECK-NEXT:        %subview = memref.subview %arg0[%arg3, 0, 0, 0] [1, 229, 229, 3] [1, 1, 1, 1] : memref<1x230x230x3xf32> to memref<1x229x229x3xf32, strided<[158700, 690, 3, 1], offset: ?>>
 # CHECK-NEXT:        %subview_0 = memref.subview %arg1[0, 0, 0, 0] [7, 7, 3, 64] [1, 1, 1, 1] : memref<7x7x3x64xf32> to memref<7x7x3x64xf32, strided<[1344, 192, 64, 1]>>
@@ -439,12 +455,12 @@ print(f"CODE: {res}")
 # CHECK-NEXT:                      }
 # CHECK-NEXT:                    }
 # CHECK-NEXT:                  }
-# CHECK-NEXT:                } {s}
-# CHECK-NEXT:              } {r}
-# CHECK-NEXT:            } {f}
-# CHECK-NEXT:          } {w}
-# CHECK-NEXT:        } {h}
-# CHECK-NEXT:      } {b}
+# CHECK-NEXT:                } {"./s"}
+# CHECK-NEXT:              } {"./r"}
+# CHECK-NEXT:            } {"./f"}
+# CHECK-NEXT:          } {"./w"}
+# CHECK-NEXT:        } {"./h"}
+# CHECK-NEXT:      } {"./b"}
 # CHECK-NEXT:      return
 # CHECK-NEXT:    }
 # CHECK-NEXT:  }

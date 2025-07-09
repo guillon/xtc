@@ -14,7 +14,7 @@ func.func @myfun(
             "K",
               "I#1" = {"unroll"},
                 "K#8"= {"unroll"},
-                  "J#64" = {"vectorize"}
+                  "J#64" = {"unroll","vectorize"}
       }
     }
     ins(%A, %B : memref<256x512xf32>, memref<512x256xf32>)

@@ -1,6 +1,6 @@
-// RUN: not mlir-loop --no-alias --print-transformed-ir %s 2>&1 | filecheck %s
+// RUN: mlir-loop --no-alias --print-transformed-ir %s 2>&1 | grep "vector" | wc -l | filecheck %s
 
-func.func @myfun(
+func.func @myvector(
   %I: memref<1x30x30x64xf32>,
   %K: memref<3x3x64x128xf32>,
   %O: memref<1x28x28x128xf32>
@@ -44,4 +44,4 @@ func.func @myfun(
   return
 }
 
-// CHECK: Attempted to vectorize, but failed
+// CHECK:       1
