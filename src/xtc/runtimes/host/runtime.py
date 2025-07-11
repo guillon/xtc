@@ -3,6 +3,7 @@
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
 import ctypes
+import ctypes.util
 import tempfile
 import subprocess
 import threading
@@ -43,10 +44,40 @@ _runtime_funcs = {
         ],
         "restype": None,
     },
+    "evaluate_perf": {
+        "sym": "evaluate_perf",
+        "argtypes": [
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.c_int,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.CFUNCTYPE(ctypes.c_voidp),
+            ctypes.POINTER(ctypes.c_voidp),
+        ],
+        "restype": None,
+    },
     "evaluate_packed": {
         "sym": "evaluate_packed",
         "argtypes": [
             ctypes.POINTER(ctypes.c_double),
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.CFUNCTYPE(ctypes.c_voidp),
+            ctypes.POINTER(ctypes.c_voidp),
+            ctypes.POINTER(ctypes.c_int),
+            ctypes.c_int,
+        ],
+        "restype": None,
+    },
+    "evaluate_packed_perf": {
+        "sym": "evaluate_packed_perf",
+        "argtypes": [
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.c_int,
+            ctypes.POINTER(ctypes.c_char_p),
             ctypes.c_int,
             ctypes.c_int,
             ctypes.c_int,
@@ -107,16 +138,26 @@ _runtime_funcs = {
 }
 
 
-def compile_runtime(out_dll):
+def compile_runtime(out_dll: str):
+    has_pfm = ctypes.util.find_library("pfm") is not None
+    pfm_opts = "-DHAS_PFM=1" if has_pfm else ""
+    pfm_libs = "-lpfm" if has_pfm else ""
     debug_opts = "-DRUNTIME_DEBUG=1" if RUNTIME_DEBUG else ""
-    files = ["evaluate.c", "cndarray.c", "alloc.c", "fclock.c", "evaluate_flops.c"]
+    files = [
+        "evaluate_perf.c",
+        "cndarray.c",
+        "alloc.c",
+        "fclock.c",
+        "evaluate_flops.c",
+        "perf_event.c",
+    ]
     top_dir = Path(__file__).parents[2]
     src_dir = top_dir / "csrcs" / "runtimes" / "host"
     src_files = [f"{src_dir}/{file}" for file in files]
     cmd = (
         "cc --shared -O2 -march=native -fPIC "
-        f"-I{src_dir} {debug_opts} "
-        f"-o {out_dll} {' '.join(src_files)}"
+        f"-I{src_dir} {debug_opts} {pfm_opts} "
+        f"-o {out_dll} {' '.join(src_files)} {pfm_libs}"
     )
     logger.debug("Compiling runtime: %s", cmd)
     p = subprocess.run(shlex.split(cmd), text=True)
@@ -167,8 +208,9 @@ def _resolve_runtime():
             )
 
 
-def __getattr__(x):
+def __getattr__(x: str):
     if x in _runtime_funcs:
         _resolve_runtime()
+        assert _runtime_entries is not None
         return _runtime_entries[x]
     raise AttributeError(f"undefined runtime function: {x}")

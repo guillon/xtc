@@ -10,7 +10,7 @@ from xtc.runtimes.types.ndarray import NDArray
 from xtc.utils.numpy import (
     np_init,
 )
-from xtc.runtimes.host.evaluate import load_and_evaluate, load_and_execute
+from xtc.runtimes.host.evaluate import load_and_evaluate
 
 import xtc.itf as itf
 import xtc.targets.host as host
@@ -40,6 +40,7 @@ class HostEvaluator(itf.exec.Evaluator):
         self._reference_impl = kwargs.get(
             "reference_impl", self._module._reference_impl
         )
+        self._pmu_counters = kwargs.get("pmu_counters", [])
         assert self._module.file_type == "shlib", "only support shlib for evaluation"
 
     @override
@@ -86,6 +87,7 @@ class HostEvaluator(itf.exec.Evaluator):
             repeat=self._repeat,
             min_repeat_ms=self._min_repeat_ms,
             number=self._number,
+            pmu_counters=self._pmu_counters,
         )
 
         if self._parameters is not None:
