@@ -59,7 +59,7 @@ from xtc.utils.cpu import cpu_peak_time
 
 
 # [Aux function] Factorisation of the generation of a string for an atom with a ratio
-def get_spec_atom_ratio(
+def _get_spec_atom_ratio(
     dim_atom: str, size_atom: int, b_lastatom_dim: bool, b_unroll: bool, b_paral: bool
 ) -> str:
     # If we are at the top level, we directly use the dim name
@@ -192,7 +192,7 @@ def get_descr_sched(scheme: List[Atom], comp: Computation, machine: Archi):
                 ibr = recover_branchid_from_stringified(str_lambda_loc, dim_atom)
                 size_atom = lsize_prev[ibr]
 
-                str_spec_atom = get_spec_atom_ratio(
+                str_spec_atom = _get_spec_atom_ratio(
                     dim_atom, size_atom, lb_lastatom_dim[i_atom], b_unroll, b_paral
                 )
 
@@ -227,7 +227,7 @@ def get_descr_sched(scheme: List[Atom], comp: Computation, machine: Archi):
                     ibr = recover_branchid_from_stringified(str_lambda_loc, dim_atom)
                     size_atom = lsize_prev[ibr]
 
-                    str_spec_atom = get_spec_atom_ratio(
+                    str_spec_atom = _get_spec_atom_ratio(
                         dim_atom, size_atom, lb_lastatom_dim[i_atom], b_unroll, b_paral
                     )
 
@@ -263,7 +263,7 @@ def get_descr_sched(scheme: List[Atom], comp: Computation, machine: Archi):
                         str_desc = d_current_str_desc[str_lambda_loc_prev]
                         size_atom = nlsize[i_br]
 
-                        str_spec_atom = get_spec_atom_ratio(
+                        str_spec_atom = _get_spec_atom_ratio(
                             dim_atom,
                             size_atom,
                             lb_lastatom_dim[i_atom],

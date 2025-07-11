@@ -23,8 +23,6 @@ from xtc.schedules.ttile.archi import Archi
 
 from xtc.utils.cpu import cpu_peak_time
 
-# NOTE: Don't forget to activate the venv of xdsl-transform
-
 # BEGIN of potential manual modifications
 temp_file_name = "/tmp/__temp_xdsl_transf_input"
 temp_file_measurement_name = "/tmp/__temp_xdsl_transf_time"
@@ -335,67 +333,6 @@ def convert_scheme_to_loopschedule(comp: Computation, machine: Archi, scheme) ->
     return str_loop_sched
 
 
-# [Aux function] ["f", "x", "c"] with " instead of '
-def string_list_to_string(lelem: List[str]) -> str:
-    str_out = "["
-    bfirst = True
-    for elem in lelem:
-        if bfirst:
-            bfirst = False
-        else:
-            str_out += ", "
-        str_out += f'"{elem}"'
-    str_out += "]"
-    return str_out
-
-
-# [Aux function] Print out dd_tilenamesize in the way needed for the loop.tiles input
-# Ex: "{"i" = {"i1" = 1}, "j" = {"j1" = 16}, "k" = {"k1" = 4}}"
-def dict_dict_to_string(dd_tilenamesize: dict[str, dict[str, int]]) -> str:
-    str_output = ""
-    bfirst = True
-    for k in dd_tilenamesize.keys():
-        d_tilenamesize = dd_tilenamesize[k]
-
-        # Comma management
-        if not bfirst:
-            str_output += ", "
-        else:
-            bfirst = False
-
-        str_output += f'"{k}" = '
-
-        # Manage d_tilenamesize. Ex: "" {"h1" = 14, "h2" = 2} ""
-        str_output += "{"
-        bfirst_2 = True
-        for varname in d_tilenamesize.keys():
-            size_varname = d_tilenamesize[varname]
-
-            # Comma management
-            if not bfirst_2:
-                str_output += ", "
-            else:
-                bfirst_2 = False
-
-            str_output += f'"{varname}" = {size_varname}'
-
-        str_output += "}"
-    return str_output
-
-
-# [Aux function] [['f1', 4], ['x2', 2]] => "f1 = 4, x2 = 2"
-def string_int_list_to_string(llelem) -> str:
-    str_out = ""
-    bfirst = True
-    for elem in llelem:
-        if bfirst:
-            bfirst = False
-        else:
-            str_out += ", "
-        str_out += f'"{elem[0]}" = {elem[1]}'
-    return str_out
-
-
 # Replicate the "avx2_matmult.mlir" from xdsl-transform
 # MATMULT: linalg.matmul
 #     https://mlir.llvm.org/docs/Dialects/Linalg/#linalgmatmul-linalgmatmulop
@@ -447,8 +384,7 @@ def build_xdsl_module_string_matmul(
         str_output += "},\n"
         str_output += f'      loop.interchange = ["i","j","j1"],\n'
         str_output += f'      loop.vectorize = ["j1"]\n'
-        # Bad idea - tank the perfs
-        # str_output += f"      loop.parallelize = [\"i\"]\n"
+        # Bad idea to add a loop parallelize on i here  (tank the perfs)
         str_output += "    }\n"
         str_output += f"    ins(%cst : {fXX})\n"
         str_output += f"    outs(%C : memref<{size_i}x{size_j}x{fXX}>)\n"
@@ -458,8 +394,6 @@ def build_xdsl_module_string_matmul(
 
     # This is the part where we plug the scheme in the text
     str_output += '      loop.dims = ["i","j","k"],\n'
-    # str_output += f"      loop.parallel_dims = {string_list_to_string(lpar_dims)},\n"
-    # str_output += f"      loop.reduction_dims = {string_list_to_string(lred_dims)},\n"
     str_loop_sched = convert_scheme_to_loopschedule(comp, machine, scheme)
     str_output += "      loop.schedule = {"
     str_output += f"{str_loop_sched}"
@@ -474,7 +408,7 @@ def build_xdsl_module_string_matmul(
 
 
 # [Aux functions] Replace the F/C/X/Y/H/W notation to F/C/H/W/R/S for conv2D
-def rename_xyhw_to_hwrs(dim_name: str) -> str:
+def _rename_xyhw_to_hwrs(dim_name: str) -> str:
     if dim_name == "x":
         return "h"
     elif dim_name == "y":
@@ -490,7 +424,7 @@ def rename_xyhw_to_hwrs(dim_name: str) -> str:
 def subst_dimname_xyhw_to_hwrs_conv2D_scheme(scheme: List[Atom]) -> List[Atom]:
     nscheme = []
     for atom in scheme:
-        atom.dim = rename_xyhw_to_hwrs(atom.dim)
+        atom.dim = _rename_xyhw_to_hwrs(atom.dim)
         nscheme.append(atom)
     return nscheme
 
@@ -498,7 +432,7 @@ def subst_dimname_xyhw_to_hwrs_conv2D_scheme(scheme: List[Atom]) -> List[Atom]:
 def subst_dimname_xyhw_to_hwrs_conv2D_dsizes(dsizes: dict[str, int]) -> dict[str, int]:
     dsizes_renamed = dict()
     for k in dsizes:
-        nk = rename_xyhw_to_hwrs(k)
+        nk = _rename_xyhw_to_hwrs(k)
         dsizes_renamed[nk] = dsizes[k]
     return dsizes_renamed
 
@@ -578,12 +512,7 @@ def build_xdsl_module_string_conv(
         str_output += "},\n"
         str_output += f'      loop.interchange = ["n","h","w","f","f1"],\n'
         str_output += f'      loop.vectorize = ["f1"]\n'
-
-        # Bad idea - tank the perfs
-        # if (size_n==1):
-        #  str_output += f"      loop.parallelize = [\"h\"]\n"     # Note: since n=1
-        # else:
-        #  str_output += f"      loop.parallelize = [\"n\"]\n"
+        # Note: this is a bad idea to add a loop.parallelize on n/h here
         str_output += "    }\n"
         str_output += f"    ins(%cst : {fXX})\n"
         str_output += (

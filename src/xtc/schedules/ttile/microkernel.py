@@ -4,6 +4,7 @@
 #
 
 from typing import List, Dict, Set, Optional, Tuple, Any
+from dataclasses import dataclass
 
 import math
 
@@ -18,6 +19,7 @@ from xtc.schedules.ttile.scheme_to_graph_xdsltransform import (
 
 
 # Class regrouping the main characteristics attached to a microkernel
+@dataclass
 class Microkernel_summary:
     machine: Archi
     comp: Computation
@@ -52,20 +54,6 @@ class Microkernel_summary:
         str_out += "]"
         return str_out
 
-    def __init__(
-        self,
-        machine: Archi,
-        comp: Computation,
-        vector_dim: str,
-        unroll_order: List[str],
-        unroll_sizes: List[int],
-    ):
-        self.machine = machine
-        self.comp = comp
-        self.vector_dim = vector_dim
-        self.unroll_order = unroll_order
-        self.unroll_sizes = unroll_sizes
-
     def __str__(self):
         str_out = f"({self.comp}; {self.machine.archi_type}, {self.machine.num_vect_reg} vreg) "
         str_out += self.to_ttile_str()
@@ -83,7 +71,7 @@ class Microkernel_summary:
 
 # [Auxfunction] Gives the formula (in string) of the number of register used by the vector-register-inplace array
 # of a computation (ex: "Output" for Conv, "C" for Matmult)
-def get_formula_volume_vect_inplace(comp: Computation) -> str:
+def _get_formula_volume_vect_inplace(comp: Computation) -> str:
     if comp.spec == Computation_spec.CONV:
         str_formula = "x * y * f"
     elif comp.spec == Computation_spec.MATMULT:
@@ -95,7 +83,7 @@ def get_formula_volume_vect_inplace(comp: Computation) -> str:
 
 # [Auxfunction] Gives the formula (in string) of the number of register used by all vectorized arrays
 # of a computation (ex: "Output + Kernel" for Conv, "C + B" for Matmult)
-def get_formula_volume_vect_total(comp: Computation) -> str:
+def _get_formula_volume_vect_total(comp: Computation) -> str:
     if comp.spec == Computation_spec.CONV:
         str_formula = "x * y * f + h * w * c * f"
     elif comp.spec == Computation_spec.MATMULT:
@@ -126,7 +114,7 @@ ratio_max_vol_vect_inplace = 1  # 0.875
 
 # Generate the list of microkernel candidate for conv2d (Ttile space)
 # Note: uses the f/c (channel sizes) x/y (size of the image) w/h (size of the windows) convention
-def generate_conv_mickern(
+def _generate_conv_mickern(
     machine: Archi, comp: Computation
 ) -> List[Microkernel_summary]:
     assert comp.spec == Computation_spec.CONV
@@ -141,10 +129,10 @@ def generate_conv_mickern(
     ]  # Unroll order if all dimensions are activated
 
     # Volume of the inplace vectorized array
-    formula_volume_vect_inplace = get_formula_volume_vect_inplace(comp)
+    formula_volume_vect_inplace = _get_formula_volume_vect_inplace(comp)
 
     # Total volume of the vectorized arrays
-    formula_volume_vect_total = get_formula_volume_vect_total(comp)
+    formula_volume_vect_total = _get_formula_volume_vect_total(comp)
 
     # Bounds on these volumes
     min_vol_vect_inplace = int(
@@ -234,7 +222,7 @@ def generate_conv_mickern(
 
 
 # Generate the list of microkernel candidate for matmul (Ttile space)
-def generate_matmult_mickern(
+def _generate_matmult_mickern(
     machine: Archi, comp: Computation
 ) -> List[Microkernel_summary]:
     assert comp.spec == Computation_spec.MATMULT
@@ -242,10 +230,10 @@ def generate_matmult_mickern(
     unroll_order_all = ["j", "i", "k"]  # Unroll order if all dimensions are activated
 
     # Volume of the inplace vectorized array
-    formula_volume_vect_inplace = get_formula_volume_vect_inplace(comp)
+    formula_volume_vect_inplace = _get_formula_volume_vect_inplace(comp)
 
     # Total volume of the vectorized arrays
-    formula_volume_vect_total = get_formula_volume_vect_total(comp)
+    formula_volume_vect_total = _get_formula_volume_vect_total(comp)
 
     # Bounds on these volumes
     min_vol_vect_inplace = int(
@@ -324,9 +312,9 @@ def generate_microkernels(
     machine: Archi, comp: Computation
 ) -> List[Microkernel_summary]:
     if comp.spec == Computation_spec.CONV:
-        return generate_conv_mickern(machine, comp)
+        return _generate_conv_mickern(machine, comp)
     elif comp.spec == Computation_spec.MATMULT:
-        return generate_matmult_mickern(machine, comp)
+        return _generate_matmult_mickern(machine, comp)
     else:
         raise ValueError("generate_microkernels : unknown")
 
@@ -338,7 +326,7 @@ def generate_microkernels(
 
 
 # [Auxfunction] Gives the dimension of repetition of a microkernel
-def get_repetition_dim(comp: Computation) -> str:
+def _get_repetition_dim(comp: Computation) -> str:
     if comp.spec == Computation_spec.CONV:
         str_dim = "c"
     elif comp.spec == Computation_spec.MATMULT:
@@ -357,7 +345,7 @@ def launch_microkernel_testing(
     mickern_scheme = mickern.to_ttile_scheme()
     # print(f"{mickern_scheme=}")
 
-    repet_dim = get_repetition_dim(comp)
+    repet_dim = _get_repetition_dim(comp)
     repet_loop_size = 512
     repet_atom = scheme.new_tile_atom(repet_dim, repet_loop_size)
 
@@ -382,7 +370,7 @@ def launch_microkernel_testing(
 
 
 # Get the order of the dimensions inside the csv
-def get_csv_dim_order(comp: Computation) -> List[str]:
+def _get_csv_dim_order(comp: Computation) -> List[str]:
     if comp.spec == Computation_spec.CONV:
         ldim_order = ["f", "x", "y", "c", "h", "w"]
     elif comp.spec == Computation_spec.MATMULT:
@@ -405,7 +393,7 @@ def run_and_save_microkernel_info(
     verbose: bool = True,
 ):
     # Retrieve the order of dims in the save file
-    ldim_order = get_csv_dim_order(comp)
+    ldim_order = _get_csv_dim_order(comp)
 
     # Get the list of microkernels (recomputation should be fast)
     lmickern = generate_microkernels(machine, comp)

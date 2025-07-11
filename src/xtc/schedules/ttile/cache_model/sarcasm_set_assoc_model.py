@@ -45,6 +45,7 @@ from xtc.schedules.ttile.cache_model.full_assoc_model import (
 # This Python file contains the SARCASM set-associativity model,
 # Set-Associative Rotating Cache Analytical/Simulating Model
 
+
 # ====================================================================
 
 # 1) Preprocessing - preparing the information about the problem
@@ -302,7 +303,7 @@ DFP_LvlArray = dict[str, List[int]]  # [lambda_loc] [cache set]
 
 
 # Deep copy of dl_fp (detailed footprint, which is a dict of list)
-def deep_copy_dl_fp(dl_fp: DFP_LvlArray) -> DFP_LvlArray:
+def _deep_copy_dl_fp(dl_fp: DFP_LvlArray) -> DFP_LvlArray:
     n_dl_fp = dict()
     for k in dl_fp:
         n_dl_fp[k] = dl_fp[k].copy()
@@ -535,7 +536,7 @@ def dl_fp_direct_computation(
         for str_lambda_loc in d_bound_tiles_cacheline.keys():
             d_shift_dim[str_lambda_loc] = shift_dim
 
-        last_dl_fp = deep_copy_dl_fp(dl_fp)
+        last_dl_fp = _deep_copy_dl_fp(dl_fp)
 
         # Go!
         dl_fp = repeat_and_rotate_dfp(
@@ -577,7 +578,7 @@ def dl_fp_direct_computation(
 #
 # Output:
 #  - dl_fp : where the repeat/rotation of the current atom is now done
-def dl_fp_ratio_atom(
+def _dl_fp_ratio_atom(
     last_dl_fp: DFP_LvlArray,
     llstride_dimname: StrideInfos,
     d_sizes_below: dict[
@@ -599,7 +600,7 @@ def dl_fp_ratio_atom(
             kdim_atom = kstride_dim
 
     if kdim_atom == (-1):
-        dl_fp = deep_copy_dl_fp(last_dl_fp)
+        dl_fp = _deep_copy_dl_fp(last_dl_fp)
         return dl_fp
 
     # Recover the pertinent infos
@@ -608,34 +609,6 @@ def dl_fp_ratio_atom(
         base_stride_dim = llstride_dimname[kdim_atom][0]
         current_dim_size = d_sizes_below[lambda_loc]
         dstride[lambda_loc] = base_stride_dim * current_dim_size
-
-    """  Optional checks - to be corrected/reactivated later if needed
-	d_sizes_above = ld_bound_tiles_cacheline_above[kdim_atom]
-	d_sizes_below = ld_bound_tiles_cacheline_below[kdim_atom]
-	# Note: the "d" is for the lambda_branches
-
-	# 2) Do we have a divisibility issue here, due to the dim being in an affine expression ?
-	#  Note: if we have "h+r" (ex: array I in CONV), if r=0, there are no issue
-	#		however, if r>0 and we are increasing h, then we do not have divisibility anymore
-	#
-	# This is a check that raise an error if it is not divisible
-	d_arrays_accs = get_array_accesses(comp)
-	l_array_accesses  = d_arrays_accs[arr_name]
-	for str_access in l_array_accesses:
-		if dim_atom not in str_access:
-			continue
-
-		# This part of the access function changes with the atom
-		# => we compute its size before/after and check their divisibility
-
-		# TODO: change that, not feasible to do it if a single size (across multiple lambda_branches)
-		#	=> Need all of them, for each lambda branches :/
-		size_access_above = evaluate_size_access(str_access, d_sizes_above)
-		size_access_below = evaluate_size_access(str_access, d_sizes_below)
-
-		if (size_access_above % size_access_below != 0):
-			raise ValueError(f"set_assoc_model :: dl_fp_ratio_atom : issue with divisibility on dim {dim_atom}")
-	"""
 
     # 3) We are done being paranoid, so we simply call repeat_and_rotate_dfp
     #  on the right arguments
@@ -657,7 +630,7 @@ def dl_fp_ratio_atom(
 
     if lambda_loc_dratio_0 in last_dl_fp.keys():
         # Simple case, a deep copy is enough
-        dl_fp = deep_copy_dl_fp(last_dl_fp)
+        dl_fp = _deep_copy_dl_fp(last_dl_fp)
     else:
         # More complicated case: we need to duplicate the values of last_dl_fp
         #  in respect to the new lambda_loc
@@ -695,7 +668,7 @@ def dl_fp_ratio_atom(
 #
 # Output:
 #  - dl_fp : where the repeat/rotation of the current atom is now done
-def dl_fp_seq_atom(
+def _dl_fp_seq_atom(
     last_dl_fp: DFP_LvlArray,
     llstride_dimname: StrideInfos,
     ld_bound_tiles_cacheline_below: IterTileInfos,
@@ -1119,7 +1092,7 @@ def periodic_extra_cacheset_estimation_lvl(
             b_skip_level = dim_atom in ldims_combi
 
             # We can now safely repeat & rotate on this dim.
-            # We recover the pertinent informations to call either "dl_fp_ratio_atom" or "dl_fp_seq_atom"
+            # We recover the pertinent informations to call either "_dl_fp_ratio_atom" or "_dl_fp_seq_atom"
             llstride_dimname = maccess_func_dim_name_coeff[array_name]
             ld_bound_tiles_cacheline = dlld_bound_tiles_cacheline[array_name][
                 loop_lvl - 1
@@ -1146,7 +1119,7 @@ def periodic_extra_cacheset_estimation_lvl(
                     )
                     if dim_atom in d_dim_bid_random_lambda_loc.keys():
                         # Not the first lambda in this dim => Deep copy is enough
-                        dl_fp = deep_copy_dl_fp(last_dl_fp)
+                        dl_fp = _deep_copy_dl_fp(last_dl_fp)
                         ddl_fp[array_name] = dl_fp
                         continue
                     else:
@@ -1193,7 +1166,7 @@ def periodic_extra_cacheset_estimation_lvl(
                         AtomType.TILE_PARAL,
                     ]
                     # We create dl_fp as a copy of last_dl_fp
-                    dl_fp = deep_copy_dl_fp(last_dl_fp)
+                    dl_fp = _deep_copy_dl_fp(last_dl_fp)
                     ddl_fp[array_name] = dl_fp
                     continue
             # End of the case where the dimension does not interact with the array access
@@ -1306,7 +1279,7 @@ def periodic_extra_cacheset_estimation_lvl(
                 #  (that needs to be multiplied to the base stride inside llstride_dimname)
 
                 # Let's go
-                dl_fp = dl_fp_ratio_atom(
+                dl_fp = _dl_fp_ratio_atom(
                     last_dl_fp,
                     llstride_dimname,
                     d_sizes_below,
@@ -1318,7 +1291,7 @@ def periodic_extra_cacheset_estimation_lvl(
                 )
 
             elif atom_below.type in [AtomType.SEQ]:
-                dl_fp = dl_fp_seq_atom(
+                dl_fp = _dl_fp_seq_atom(
                     last_dl_fp,
                     llstride_dimname,
                     ld_bound_tiles_cacheline_below,
@@ -1591,7 +1564,7 @@ DFP_Slice_CacheSet = List[
 #  Output:
 #   - lldd_fp : [cache set] [loop lvl] [lambda_branch] [array_name]
 #   Note: need to be aligned with the "ldd_footprint" from the "full_assoc_model.py"
-def convert_lddl_to_lldd_fp(
+def _convert_lddl_to_lldd_fp(
     lddl_fp: List[dict[str, DFP_LvlArray]], num_cache_set: int
 ) -> List[DFP_Slice_CacheSet]:
     num_loop = len(lddl_fp)
@@ -1704,7 +1677,7 @@ def compute_cacheset_aware_comm_vol(
         b_sanity_check=b_sanity_check,
     )
     lddl_fp_llc = combine_dfp_exact_combi(lddl_fp_llc, num_cache_set_llc)
-    lldd_fp_lcc = convert_lddl_to_lldd_fp(lddl_fp_llc, num_cache_set_llc)
+    lldd_fp_lcc = _convert_lddl_to_lldd_fp(lddl_fp_llc, num_cache_set_llc)
     # lldd_fp_lcc : [cache set] [loop lvl] [lambda_branch] [array_name]
 
     # Quantities that will be common whatever the loop level or cache level considered

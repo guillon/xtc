@@ -195,7 +195,7 @@ def print_scheme(scheme: List[Atom]):
 
 # Auxilliary function that manage the string preprocessing, in order to extract
 # the string corresponding to each atom
-def preprocess_scheme_str(str_scheme: str) -> List[str]:
+def _preprocess_scheme_str(str_scheme: str) -> List[str]:
     # Remove the leading/finishing empty chars
     str_scheme = str_scheme.strip()
 
@@ -240,7 +240,7 @@ def preprocess_scheme_str(str_scheme: str) -> List[str]:
 
 
 # Aux function, parse atoms of the shape "U(d, 42)", "T(d, 20)", Tpart(d, 43) or "V(d, 16)"
-def parse_V_T_U_Tpart_Tpara_atom(str_atom: str) -> Tuple[str, int]:
+def _parse_V_T_U_Tpart_Tpara_atom(str_atom: str) -> Tuple[str, int]:
     # Get the content of the parenthesis
     lstr_atom = str_atom.split("(")
     assert len(lstr_atom) == 2
@@ -257,7 +257,7 @@ def parse_V_T_U_Tpart_Tpara_atom(str_atom: str) -> Tuple[str, int]:
 
 
 # Aux function, parse atoms of the shape "Hoist_var([O, I])"
-def parse_hoistvar_atom(str_atom: str) -> List[str]:
+def _parse_hoistvar_atom(str_atom: str) -> List[str]:
     # Get the content of the brackets
     lstr_atom = str_atom.split("[")
     assert len(lstr_atom) == 2
@@ -271,7 +271,7 @@ def parse_hoistvar_atom(str_atom: str) -> List[str]:
 
 
 # Aux function, parse atoms of the shape "UL(d, [3,4])" or "TL(d, [ 12, 14 ])"
-def parse_Ulambda_Tlambda_atom(str_atom: str) -> Tuple[str, List[int]]:
+def _parse_Ulambda_Tlambda_atom(str_atom: str) -> Tuple[str, List[int]]:
     # Get the content of the parenthesis
     lstr_atom = str_atom.split("(")
     assert len(lstr_atom) == 2
@@ -298,7 +298,7 @@ def parse_Ulambda_Tlambda_atom(str_atom: str) -> Tuple[str, List[int]]:
 
 
 # Aux function, parse atoms of the shape "Seq(d)"
-def parse_seq_atom(str_atom: str) -> str:
+def _parse_seq_atom(str_atom: str) -> str:
     # Get the content of the parenthesis
     lstr_atom = str_atom.split("(")
     assert len(lstr_atom) == 2
@@ -313,7 +313,7 @@ def parse_seq_atom(str_atom: str) -> str:
 def build_scheme_from_str(ttile_str: str) -> List[Atom]:
     scheme = []
 
-    latom_str = preprocess_scheme_str(ttile_str)
+    latom_str = _preprocess_scheme_str(ttile_str)
 
     for str_atom in latom_str:
         # Quick textual preprocessing
@@ -329,7 +329,7 @@ def build_scheme_from_str(ttile_str: str) -> List[Atom]:
         if (str_atom[0] in ["V", "U", "T"]) and (
             not str_atom.startswith("UL") and (not str_atom.startswith("TL"))
         ):
-            dim, ratio = parse_V_T_U_Tpart_Tpara_atom(str_atom)
+            dim, ratio = _parse_V_T_U_Tpart_Tpara_atom(str_atom)
 
             if str_atom.startswith("Tpart"):
                 # Actually not a ratio, but a size
@@ -349,21 +349,21 @@ def build_scheme_from_str(ttile_str: str) -> List[Atom]:
             scheme.append(atom)
 
         elif str_atom.startswith("Hoist_var"):
-            lvars_hoist = parse_hoistvar_atom(str_atom)
+            lvars_hoist = _parse_hoistvar_atom(str_atom)
             atom = new_hoist_atom(lvars_hoist)
             scheme.append(atom)
 
         elif str_atom.startswith("Seq"):
-            dim = parse_seq_atom(str_atom)
+            dim = _parse_seq_atom(str_atom)
             atom = new_seq_atom(dim)
             scheme.append(atom)
 
         elif str_atom.startswith("UL"):
-            dim, lratios = parse_Ulambda_Tlambda_atom(str_atom)
+            dim, lratios = _parse_Ulambda_Tlambda_atom(str_atom)
             atom = new_unrollLambda_atom(dim, lratios)
             scheme.append(atom)
         elif str_atom.startswith("TL"):
-            dim, lratios = parse_Ulambda_Tlambda_atom(str_atom)
+            dim, lratios = _parse_Ulambda_Tlambda_atom(str_atom)
             atom = new_tileLambda_atom(dim, lratios)
             scheme.append(atom)
 

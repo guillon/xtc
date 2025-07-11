@@ -49,7 +49,7 @@ total_fieldname_fp = "_Total"
 
 # [Aux function] Rectify the footprint at one level to take into account
 # the cache line (in respect to the inner dimension of arrays)
-def rectify_fp_cache_line(
+def _rectify_fp_cache_line(
     ddfootprint: LevelFootprint,
     d_arrays_accs: dict[str, Tuple[List[str], int]],
     d_lsizes: dict[str, List[int]],
@@ -152,7 +152,7 @@ def compute_footprint_for_each_level(
 
         # Take into account the cache line alignment issues
         # Augment ddfootprint with elements on the same cache lines even if they are not used
-        ddfootprint = rectify_fp_cache_line(
+        ddfootprint = _rectify_fp_cache_line(
             ddfootprint, d_arrays_accs, d_lsizes, cache_line_size
         )
 
@@ -203,7 +203,7 @@ def print_ldd_footprint(
 
 # [Aux function] Add a lambda_id (branch # "kbr") for dimension "dim", that is
 # not already present in str_lambda_loc
-def extend_str_lambda_loc(str_lambda_loc: str, dim: str, kbr: int, comp: Computation):
+def _extend_str_lambda_loc(str_lambda_loc: str, dim: str, kbr: int, comp: Computation):
     # Recover all info from str_lambda_loc
     d_dim_brid = recover_all_branchid_from_stringified(str_lambda_loc)
     assert dim not in d_dim_brid
@@ -299,7 +299,7 @@ def find_saturation_level(
                 for str_lambda_loc, opt_loop_lvl in d_sat_loop_lvl.items():
                     # Duplicate the info according to the new branches
                     for kbr in range(num_lambda_br_dim):
-                        n_str_lambda_loc = extend_str_lambda_loc(
+                        n_str_lambda_loc = _extend_str_lambda_loc(
                             str_lambda_loc, dim, kbr, comp
                         )
                         nd_sat_loop_lvl[n_str_lambda_loc] = opt_loop_lvl

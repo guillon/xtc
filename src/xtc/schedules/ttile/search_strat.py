@@ -85,12 +85,15 @@ Microkernel_strat = Microkernel_strat_single | Microkernel_strat_lambda
 
 
 # Check if a microkernel strategy is a lambda or not
-def is_microkernel_strat_lambda(mickern_strat: Microkernel_strat) -> bool:
-    match mickern_strat:
-        case Microkernel_strat_single():
-            return False
-        case Microkernel_strat_lambda():
-            return True
+def _is_microkernel_strat_lambda(mickern_strat: Microkernel_strat) -> bool:
+    if isinstance(mickern_strat, Microkernel_strat_single):
+        return False
+    elif isinstance(mickern_strat, Microkernel_strat_lambda):
+        return True
+    else:
+        raise ValueError(
+            f"is_microkernel_strat_lambda : {mickern_strat} is neither a single or lambda strat."
+        )
 
 
 # ====================================================================
@@ -99,7 +102,7 @@ def is_microkernel_strat_lambda(mickern_strat: Microkernel_strat) -> bool:
 
 
 # [Aux aux function] Group a list of microkernel according to their size along "dim".
-def regroup_microkernels_split_bucket(
+def _regroup_microkernels_split_bucket(
     ld_mickern_info_bucket: List[dict[str, int]], dim: str
 ) -> List[List[dict[str, int]]]:
     # Use a dictionnary to group microkernels according to their size along "dim"
@@ -122,7 +125,7 @@ def regroup_microkernels_split_bucket(
 
 # [Aux function] Given a list of microkernel, regroup them by dimension, except for lambda_dim
 # Assume that the list of microkernels in "ld_mickern" have all the same keys (dim name).
-def regroup_microkernels_by_size_not_lambda_dim(
+def _regroup_microkernels_by_size_not_lambda_dim(
     ld_mickern: List[dict[str, int]], lambda_dim: str
 ) -> List[List[dict[str, int]]]:
     if ld_mickern == []:
@@ -142,7 +145,7 @@ def regroup_microkernels_by_size_not_lambda_dim(
 
         # For each bucket...
         for ld_mickern_info_bucket in l_ld_mickern_info:
-            l_ld_mickern_info_bucket = regroup_microkernels_split_bucket(
+            l_ld_mickern_info_bucket = _regroup_microkernels_split_bucket(
                 ld_mickern_info_bucket, dim
             )
 
@@ -158,12 +161,12 @@ def regroup_microkernels_by_size_not_lambda_dim(
 # [Aux aux function] Perform Euclid algorithm on 2 numbers that are prime between each other
 # to figure out coefficients a,b such that a*x1p+b*x2p = 1
 # Invariant: arg1 = lcoeff1 . [x1p, x2p]^T  | arg2 = lcoeff2 . [x1p, x2p]^T
-def euclid_algorithm_prime(
+def _euclid_algorithm_prime(
     arg1: int, arg2: int, lcoeff1: List[int], lcoeff2: List[int]
 ) -> Tuple[int, int]:
     # Order the input
     if arg1 < arg2:
-        return euclid_algorithm_prime(arg2, arg1, lcoeff2, lcoeff1)
+        return _euclid_algorithm_prime(arg2, arg1, lcoeff2, lcoeff1)
 
     # One step
     mod_arg12 = arg1 % arg2
@@ -181,11 +184,11 @@ def euclid_algorithm_prime(
         return (nlcoeff[0], nlcoeff[1])
     else:
         # Recursion
-        return euclid_algorithm_prime(arg2, mod_arg12, lcoeff2, nlcoeff)
+        return _euclid_algorithm_prime(arg2, mod_arg12, lcoeff2, nlcoeff)
 
 
 # [Aux aux function] List all the divisors of "n", including 1/itself
-def list_all_divisors(n: int) -> List[int]:
+def _list_all_divisors(n: int) -> List[int]:
     if n == 1:
         return [1]
     ldiv = [1]
@@ -233,7 +236,7 @@ def find_affine_combination_dividing(x1: int, x2: int, size_x: int) -> List[List
     elif x2p == 1:
         (a, b) = (0, 1)
     else:
-        (a, b) = euclid_algorithm_prime(x1p, x2p, [1, 0], [0, 1])
+        (a, b) = _euclid_algorithm_prime(x1p, x2p, [1, 0], [0, 1])
 
     # We multiply a and b by size_x_p, such that "a*x1p + b*x2p = size_x_p"
     a = int(a * size_x_p)
@@ -284,7 +287,7 @@ def find_affine_combination_dividing(x1: int, x2: int, size_x: int) -> List[List
         gcd_ab = math.gcd(a, b)
 
         # List all divisors of gcd_ab, including 1
-        ldiv = list_all_divisors(gcd_ab)
+        ldiv = _list_all_divisors(gcd_ab)
 
         # print(f"{gcd_ab=}")
         # print(f"{ldiv=}")
@@ -353,7 +356,7 @@ def select_microkernel_ttile(
     # and check how to compose them.
 
     # 1) Regroup microkernels depending on the other dims than lambda_dim
-    l_ld_mickern_info = regroup_microkernels_by_size_not_lambda_dim(
+    l_ld_mickern_info = _regroup_microkernels_by_size_not_lambda_dim(
         l_mickern_base_lambda, lambda_dim
     )
 
@@ -473,7 +476,7 @@ def convert_microkernel_strat_to_scheme(
 
 # [Aux function] Divides some sizes by other sizes
 # Note: d_size_div must only have list of 1 element on its values (aka, no lambda)
-def dprob_sizes_remaining(
+def _dprob_sizes_remaining(
     dprob_sizes: dict[str, int], d_size_div: dict[str, List[int]]
 ) -> dict[str, int]:
     d_res_sizes = dprob_sizes.copy()
@@ -496,7 +499,7 @@ def dprob_sizes_remaining(
 # [Aux aux function] Get the list of prime divisors of a number
 # 	Recursive function: "n" is the rest of the number,
 # and "k" is the current coefficient being checked
-def list_all_prime_divisors(n: int, k: int = 2) -> List[int]:
+def _list_all_prime_divisors(n: int, k: int = 2) -> List[int]:
     # Termination cases
     if n == 1:
         return []
@@ -506,12 +509,12 @@ def list_all_prime_divisors(n: int, k: int = 2) -> List[int]:
     # Recursion
     if n % k == 0:
         # k is a new prime divisor: add it
-        ldiv = list_all_prime_divisors(int(n / k), k)
+        ldiv = _list_all_prime_divisors(int(n / k), k)
         ldiv.append(k)
         return ldiv
     else:
         # Carry on
-        return list_all_prime_divisors(n, k + 1)
+        return _list_all_prime_divisors(n, k + 1)
 
 
 # [Aux function] Reservation of the parallel iterations
@@ -520,7 +523,7 @@ def list_all_prime_divisors(n: int, k: int = 2) -> List[int]:
 # dsize_rem = dict: key = dimension / value = remaining ratio to distribute in a scheme for that dim
 # nthread = number of thread/degree of parallelism targetted
 # threashold_ndiv = if perfect divisibility is not attainable, try to get (nthread*threashold_ndiv) parallel iterations
-def book_parallel_dimensions(
+def _book_parallel_dimensions(
     lparallel_dim: List[str],
     d_size_rem: dict[str, int],
     nthread: int,
@@ -535,10 +538,10 @@ def book_parallel_dimensions(
     # We get all the prime divisors of the parallel dimensions
     d_div_para_dim = dict()
     for dim in lparallel_dim:
-        d_div_para_dim[dim] = list_all_prime_divisors(d_size_rem[dim])
+        d_div_para_dim[dim] = _list_all_prime_divisors(d_size_rem[dim])
 
     # We get the prime divisors of nthread
-    ldiv_nthread = list_all_prime_divisors(nthread)
+    ldiv_nthread = _list_all_prime_divisors(nthread)
 
     # DEBUG
     # print(f"{d_div_para_dim=}")
@@ -603,7 +606,7 @@ def book_parallel_dimensions(
         #  then one of its prime factor
         dim_selected = random.choice(l_remain_parallel_dim)
         size_dim_selected = d_size_rem[dim_selected] // d_ratio_taken[dim]
-        l_prime_factors = list_all_prime_divisors(
+        l_prime_factors = _list_all_prime_divisors(
             size_dim_selected
         )  # Note we could avoid recomputation
         ratio_selected = random.choice(l_prime_factors)
@@ -647,7 +650,7 @@ def complete_scheme_from_mickern_ttile_div(
     )
 
     # Remaining atoms to complete a lambda (to be inserted above)
-    if is_microkernel_strat_lambda(mickern_strat):
+    if _is_microkernel_strat_lambda(mickern_strat):
         assert isinstance(mickern_strat, Microkernel_strat_lambda)
         lambda_dim = mickern_strat.lambda_dim
         lratios = [mickern_strat.num_repet_1, mickern_strat.num_repet_2]
@@ -664,7 +667,7 @@ def complete_scheme_from_mickern_ttile_div(
     d_sizemickern = scheme.get_sizes_scheme(l_mickern_scheme)
     if lambda_dim == None:
         # No lambda in the microkernel
-        d_size_rem = dprob_sizes_remaining(dprob_sizes, d_sizemickern)
+        d_size_rem = _dprob_sizes_remaining(dprob_sizes, d_sizemickern)
     else:
         # Lambda in the microkernel
         assert isinstance(mickern_strat, Microkernel_strat_lambda)
@@ -682,7 +685,7 @@ def complete_scheme_from_mickern_ttile_div(
                 ]
         # print(f"{dprob_sizes=}")
         # print(f"{dsub_sizes=}")
-        d_size_rem = dprob_sizes_remaining(dprob_sizes, dsub_sizes)
+        d_size_rem = _dprob_sizes_remaining(dprob_sizes, dsub_sizes)
 
     # DEBUG/Interesting variables for the rest of this function
     if b_debug_complete_scheme_ttile_div:
@@ -697,11 +700,13 @@ def complete_scheme_from_mickern_ttile_div(
         l_parallel_scheme = []
     else:
         # Book parallel dimensions
-        l_parallel_scheme = book_parallel_dimensions(lparallel_dim, d_size_rem, nthread)
+        l_parallel_scheme = _book_parallel_dimensions(
+            lparallel_dim, d_size_rem, nthread
+        )
 
         # Update the remaining sizes
         d_size_parallel = scheme.get_sizes_scheme(l_parallel_scheme)
-        d_size_rem = dprob_sizes_remaining(d_size_rem, d_size_parallel)
+        d_size_rem = _dprob_sizes_remaining(d_size_rem, d_size_parallel)
 
     # DEBUG/Interesting variables for the rest of this function
     if b_debug_complete_scheme_ttile_div:
@@ -723,7 +728,7 @@ def complete_scheme_from_mickern_ttile_div(
 
     # Update the remaining sizes
     d_size_reuse = scheme.get_sizes_scheme(lreuse_loop_scheme)
-    d_size_rem = dprob_sizes_remaining(d_size_rem, d_size_reuse)
+    d_size_rem = _dprob_sizes_remaining(d_size_rem, d_size_reuse)
 
     # DEBUG/Interesting variables for the rest of this function
     if b_debug_complete_scheme_ttile_div:
@@ -737,7 +742,7 @@ def complete_scheme_from_mickern_ttile_div(
     #   Don't forget to add the lambda, if we have one from the microkernel
     l_bag_lscheme = []
 
-    if is_microkernel_strat_lambda(mickern_strat):
+    if _is_microkernel_strat_lambda(mickern_strat):
         l_bag_lscheme.append(l_lambda_scheme)
 
     for dim in d_size_rem.keys():
@@ -745,7 +750,7 @@ def complete_scheme_from_mickern_ttile_div(
 
         # Decide how to decompose the remaining ratio of this dim
         while rem_ratio > 1:
-            ldiv_rem_ratio = list_all_divisors(rem_ratio)
+            ldiv_rem_ratio = _list_all_divisors(rem_ratio)
             ldiv_rem_ratio.remove(1)
 
             n_ratio = random.choice(ldiv_rem_ratio)
@@ -905,12 +910,12 @@ def complete_scheme_from_mickern_ttile_nondiv(
     )
 
     # Remaining atoms to complete a lambda (to be inserted above)
-    assert not is_microkernel_strat_lambda(mickern_strat)
+    assert not _is_microkernel_strat_lambda(mickern_strat)
 
     # Compute the remaining size that needs to be managed by the rest of the scheme
     d_sizemickern = scheme.get_sizes_scheme(l_mickern_scheme)
     # No lambda in the microkernel
-    d_size_rem = dprob_sizes_remaining(dprob_sizes, d_sizemickern)
+    d_size_rem = _dprob_sizes_remaining(dprob_sizes, d_sizemickern)
 
     # DEBUG/Interesting variables for the rest of this function
     if b_debug_complete_scheme_ttile_nondiv:
@@ -924,11 +929,13 @@ def complete_scheme_from_mickern_ttile_nondiv(
         l_parallel_scheme = []
     else:
         # Book parallel dimensions
-        l_parallel_scheme = book_parallel_dimensions(lparallel_dim, d_size_rem, nthread)
+        l_parallel_scheme = _book_parallel_dimensions(
+            lparallel_dim, d_size_rem, nthread
+        )
 
         # Update the remaining sizes
         d_size_parallel = scheme.get_sizes_scheme(l_parallel_scheme)
-        d_size_rem = dprob_sizes_remaining(d_size_rem, d_size_parallel)
+        d_size_rem = _dprob_sizes_remaining(d_size_rem, d_size_parallel)
 
     # DEBUG/Interesting variables for the rest of this function
     if b_debug_complete_scheme_ttile_nondiv:
@@ -949,7 +956,7 @@ def complete_scheme_from_mickern_ttile_nondiv(
 
     # Update the remaining sizes
     d_size_reuse = scheme.get_sizes_scheme(lreuse_loop_scheme)
-    d_size_rem = dprob_sizes_remaining(d_size_rem, d_size_reuse)
+    d_size_rem = _dprob_sizes_remaining(d_size_rem, d_size_reuse)
 
     # DEBUG/Interesting variables for the rest of this function
     if b_debug_complete_scheme_ttile_nondiv:

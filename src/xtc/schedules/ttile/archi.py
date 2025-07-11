@@ -4,6 +4,7 @@
 #
 
 from enum import Enum
+from dataclasses import dataclass
 
 
 class Architype_enum(Enum):
@@ -12,6 +13,7 @@ class Architype_enum(Enum):
     AMD = 3
 
 
+@dataclass
 class Archi:
     name: str
     archi_type: Architype_enum
@@ -32,34 +34,6 @@ class Archi:
 
     # Parallel above L2
     num_core: int
-
-    def __init__(
-        self,
-        name,
-        archi_type,
-        vector_size,
-        num_vect_reg,
-        cache_l1_size,
-        cache_l1_assoc,
-        cache_l2_size,
-        cache_l2_assoc,
-        cache_l3_size,
-        cache_l3_assoc,
-        num_core,
-    ):
-        self.name = name
-        self.archi_type = archi_type
-        self.vector_size = vector_size
-        self.num_vect_reg = num_vect_reg
-
-        self.cache_l1_size = cache_l1_size
-        self.cache_l1_assoc = cache_l1_assoc
-        self.cache_l2_size = cache_l2_size
-        self.cache_l2_assoc = cache_l2_assoc
-        self.cache_l3_size = cache_l3_size
-        self.cache_l3_assoc = cache_l3_assoc
-
-        self.num_core = num_core
 
 
 # ====================================================================
