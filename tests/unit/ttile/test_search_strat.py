@@ -1,7 +1,7 @@
 from pathlib import Path
 import random
 
-from xtc.schedules.ttile.scheme import convert_scheme_to_str, check_coherency_scheme, check_dim_coherency_scheme
+from xtc.schedules.ttile.scheme import convert_scheme_to_str, check_coherency_scheme, check_dim_coherency_scheme, normalize_scheme
 from xtc.schedules.ttile.computation import Computation, Computation_spec
 from xtc.schedules.ttile.archi import pinocchio_machine, laptop_guillaume_machine
 from xtc.schedules.ttile.microkernel import load_microkernel_info
@@ -184,8 +184,10 @@ def test_full_ttile_algorithm():
 	# Check that the scheme is well-built
 	assert(check_coherency_scheme(full_scheme))
 	assert(check_dim_coherency_scheme(full_scheme, dprob_sizes))
+	
+	full_scheme = normalize_scheme(full_scheme)
 
-	expected_full_scheme = "[V(j,8); U(j,4); UL(i, [6, 7]); U(k,1); T(k,32); Hoist_var(['C']); T(k,2); TL(i, [7, 10]); Seq(i)]"
+	expected_full_scheme = "[V(j,8); U(j,4); UL(i, [6, 7]); T(k,32); Hoist_var(['C']); T(k,2); TL(i, [7, 10]); Seq(i)]"
 	assert(convert_scheme_to_str(full_scheme) == expected_full_scheme)
 
 	return
@@ -228,6 +230,47 @@ def test_ttile_partial_tile_algorithm():
 	assert(check_dim_coherency_scheme(full_scheme, dprob_sizes, verbose=True))
 
 	expected_full_scheme = "[V(j,8); U(j,4); U(i,7); U(k,1); T(k,32); Hoist_var(['C']); Tpart(i,98); Tpart(k,64); Tpart(i,105); Tpart(i,112)]"
+	assert(convert_scheme_to_str(full_scheme) == expected_full_scheme)
+
+	return
+
+# Test of the Ttile partial tile algorithm
+def test_ttile_partial_tile_algorithm_parallel():
+	# Deterministic test
+	random.seed(42105105)
+
+	# Problem 
+	filename_mickern_info = str(Path(__file__).parent / "mickern_xtctvm_dummyresult_matmul_f32.csv")
+	dprob_sizes = {'i': 112, 'j': 32, 'k': 64 }
+	machine = laptop_guillaume_machine
+	comp = Computation(Computation_spec.MATMULT, 4)
+	nthread = None
+	
+	# Information about the scheme related to the computation	
+	vector_dim = "j"
+	lambda_dim = None   # No lambda with partial tiles
+	reuse_dim = "k"
+	lparallel_dim = ["i","j"]
+	loutput_array_name = [ "C" ]
+
+	# Parameters of the Ttile algorithm
+	unroll_order = ["j", "i", "k"]
+	reuse_loop_min = 32
+	threshold_mickern_perf_ratio = 0.85
+	
+	# Let's go
+	full_scheme = ttile_partial_tile_algorithm(filename_mickern_info, dprob_sizes, machine, comp,
+			vector_dim, lambda_dim, reuse_dim, lparallel_dim, loutput_array_name,
+			threshold_mickern_perf_ratio, unroll_order, reuse_loop_min,
+			nthread=4)
+
+	assert(full_scheme!=None)
+
+	# Check that the scheme is well-built
+	assert(check_coherency_scheme(full_scheme))
+	assert(check_dim_coherency_scheme(full_scheme, dprob_sizes, verbose=True))
+	
+	expected_full_scheme = "[V(j,8); U(j,4); U(i,7); U(k,1); T(k,32); Hoist_var(['C']); Tpart(k,64); Tpart(i,21); Tpart(i,28); Tparal(i,2); Tparal(i,2)]"
 	assert(convert_scheme_to_str(full_scheme) == expected_full_scheme)
 
 	return

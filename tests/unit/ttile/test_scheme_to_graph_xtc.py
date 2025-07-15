@@ -81,6 +81,43 @@ def test_launch_and_measure_scheme_graph_interf_conv_tvm():
 
 	return
 
+def test_launch_and_measure_scheme_graph_interf_conv_tvm_f64():
+	comp = Computation(Computation_spec.CONV, 8)  # f64
+	machine = laptop_guillaume_machine
+
+	str_scheme = "[V (F, 8); U (F, 4); U (X, 2); U (Y, 2); U (C, 4); T (C, 16); T (F, 2); T (X, 7); T (Y, 14); T (X, 2); T (W, 3); T (H, 3)]"
+	scheme = build_scheme_from_str(str_scheme)
+	
+	dsizes = {"n" : 1, "f" : 128, "c": 64, "x": 28, "y": 28, "h": 3, "w": 3, "strx": 1, "stry": 1}
+	
+	backend = "tvm"
+
+	b_no_descript_sched = False
+	res = launch_and_measure_scheme_graph_interf(comp, machine, scheme, dsizes, backend, b_no_descript_sched=b_no_descript_sched)
+	
+	assert("peak_perf" in res.keys())
+
+	return
+
+
+def test_launch_and_measure_scheme_graph_interf_matmul_partial_parall():
+	comp = Computation(Computation_spec.MATMULT, 4)  # f32
+	machine = laptop_guillaume_machine
+
+	str_scheme = "[V(j,8); U(j,4); U(i,7); U(k,1); T(k,32); Hoist_var(['C']); Tpart(k,64); Tpart(i,21); Tpart(i,28); Tparal(i,2); Tparal(i,2)]"
+	scheme = build_scheme_from_str(str_scheme)
+	
+	dsizes = {'i': 112, 'j': 32, 'k': 64 }
+	
+	backend = "mlir" # Note: cannot be mlir since divisibility is required
+
+	b_no_descript_sched = False
+	res = launch_and_measure_scheme_graph_interf(comp, machine, scheme, dsizes, backend, b_no_descript_sched=b_no_descript_sched)
+	
+	assert("peak_perf" in res.keys())
+
+	return
+
 
 # Test "get_descr_sched"
 def test_get_descr_sched_1():

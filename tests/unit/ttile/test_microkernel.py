@@ -3,7 +3,7 @@ from pathlib import Path
 from xtc.schedules.ttile.computation import Computation, Computation_spec
 from xtc.schedules.ttile.archi import pinocchio_machine, laptop_guillaume_machine
 
-from xtc.schedules.ttile.microkernel import generate_microkernels
+from xtc.schedules.ttile.microkernel import generate_microkernels, launch_microkernel_testing
 from xtc.schedules.ttile.microkernel import load_microkernel_info, sort_microkernels_by_pperf
 
 
@@ -32,6 +32,22 @@ def test_microkernel_gen_matmult():
 
 	assert(len(lmickern)==59)
 	assert(str(lmickern[-1]) == "(matmul(f32); Architype_enum.INTEL, 32 vreg) [V (j, 16); U(i, 19)]")
+
+	return
+
+
+# Test of the microkernel generation and measurement for matmult
+# WARNING - actual execution on a machine. This was done on "laptop_guillaume_machine"
+def test_launch_microkernel_testing_matmult():
+	machine = laptop_guillaume_machine
+	comp = Computation(Computation_spec.MATMULT, 4)
+
+	lmickern = generate_microkernels(machine, comp)
+	assert(len(lmickern) == 30)
+
+	backend = "tvm"
+	peak_perf = launch_microkernel_testing(machine, comp, lmickern[9], backend)
+	assert(peak_perf != None)
 
 	return
 

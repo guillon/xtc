@@ -205,33 +205,7 @@ def _preprocess_scheme_str(str_scheme: str) -> List[str]:
     str_scheme = str_scheme[1:-1]
 
     # Consider each atom one by one
-    ltempatoms = str_scheme.split(";")
-
-    # Regather the lambda_apply (which was splitted into different parts)
-    latoms_str = []
-    b_lambda_apply_activated = False
-    temp_atom_lambda_apply = ""
-    for str_atom in ltempatoms:
-        # Start of a Lambda
-        if ("Lambda" in str_atom) and ("]" not in str_atom):
-            temp_atom_lambda_apply = str_atom
-            b_lambda_apply_activated = True
-
-        # Continuation/end of a Lambda_apply
-        elif b_lambda_apply_activated:
-            temp_atom_lambda_apply = temp_atom_lambda_apply + ";" + str_atom
-
-            # End the accumulation
-            if "]" in str_atom:
-                latoms_str.append(temp_atom_lambda_apply)
-
-                # End the accumulation
-                b_lambda_apply_activated = False
-                temp_atom_lambda_apply = ""
-
-        # Other cases (which are not lambda)
-        else:
-            latoms_str.append(str_atom)
+    latoms_str = str_scheme.split(";")
 
     # DEBUG
     # print(latoms_str)

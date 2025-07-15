@@ -4,7 +4,7 @@ from xtc.schedules.ttile.scheme_to_xdsltransform import subst_dimname_xyhw_to_hw
 from xtc.schedules.ttile.computation import Computation, Computation_spec
 from xtc.schedules.ttile.computation import get_list_array_contiguous_alloc, get_default_sizes
 from xtc.schedules.ttile.cache_model.full_assoc_model import ReuseLoopStrat
-from xtc.schedules.ttile.prob_sizes import ddsizes_Yolo, subst_dimname_xyhw_to_hwrs_conv2D_dsizes
+from xtc.schedules.ttile.prob_sizes import ddsizes_Yolo, ddsizes_matmul, subst_dimname_xyhw_to_hwrs_conv2D_dsizes
 
 from xtc.schedules.ttile.cache_model.sarcasm_set_assoc_model import build_maccess_func_coeff, build_bound_tiles_cacheline
 from xtc.schedules.ttile.cache_model.sarcasm_set_assoc_model import repeat_and_rotate_dfp, sum_with_shift
@@ -1032,6 +1032,33 @@ def test_compute_cacheset_aware_comm_vol_7_AllReuse():
 		b_sanity_check=True)
 
 	assert(lcachemisses == [6840800,4231096])
+
+	return
+
+def test_compute_cacheset_aware_comm_vol_8():
+	# Test with matmult
+	str_scheme = "[V(J,16); U(J,2); U(I,8); T(K,512); T(K,4); T(I,32); T(J,16); T(J,16)]"
+	scheme = build_scheme_from_str(str_scheme)
+
+	comp = Computation(Computation_spec.MATMULT, 4)
+	d_prob_sizes = ddsizes_matmul["Gemma2B_QKV"]
+	lcont_arr_order = get_list_array_contiguous_alloc(comp)
+	
+	# Pinocchio L1 and L2 cache sizes
+	lcachesizes = [8192, 262144]  # In float (= 4 octets)
+	lassoc_cache = [8, 16]
+	lnum_cache_set = [64, 1024]
+	cache_line_size = 16
+	
+	# Let's go!
+	lcachemisses = compute_cacheset_aware_comm_vol(scheme, comp, d_prob_sizes, lcont_arr_order,
+		lcachesizes, lassoc_cache, lnum_cache_set, cache_line_size,
+		b_sanity_check=True) #, reuse_strat_full_assoc=ReuseLoopStrat.MAX1_LOOP_REUSE)
+
+	assert(lcachemisses == [444334080, 43155456])
+
+	# Note: lots of power of 2 in the problem size, lots of imprecision from the model since
+	#	everything goes to a few cache sets in the first iteration.
 
 	return
 

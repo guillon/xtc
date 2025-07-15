@@ -7,7 +7,7 @@ from typing import List, Tuple, Optional, Dict
 import math
 
 from xtc.schedules.ttile.scheme import Atom, AtomType
-from xtc.schedules.ttile.scheme import get_sizes_scheme, get_unlambda_sizes_scheme
+from xtc.schedules.ttile.scheme import get_sizes_scheme
 from xtc.schedules.ttile.scheme import (
     stringify_lambda_choice,
     get_list_dims_str_lambda_loc,
@@ -459,7 +459,6 @@ def sum_with_shift(
 #  - lcont_arr_order : order of contiguous allocation of the arrays used by comp
 #  - array_name : name of the array currently considered
 #  - dprob_sizes : problem sizes from the complete scheme
-#     (ex: obtained as result of "scheme :: get_unlambda_sizes_scheme")
 #  - num_cache_set : number of cache set in the currently considered cache
 #  - cache_line_size : number of elements in a cache line
 #

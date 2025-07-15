@@ -55,10 +55,6 @@ def _rectify_fp_cache_line(
     d_lsizes: dict[str, List[int]],
     cache_line_size: int,
 ) -> LevelFootprint:
-    # print(ddfootprint)
-    # print(d_arrays_accs)
-    # print(d_lsizes)
-
     for str_lambda_branch in ddfootprint.keys():
         dfootprint = ddfootprint[str_lambda_branch]
 
