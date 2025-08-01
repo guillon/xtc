@@ -27,7 +27,6 @@ class Descript:
 
     def apply(self, node_name: str, spec: dict[str, dict]):
         flat_schedules = self._flatten_schedule(root=node_name, spec=spec)
-        # print(flat_schedules, "\n\n\n")
         self._check_flattened_schedule(flat_schedules)
         for schedule in flat_schedules:
             root = schedule["root"]
@@ -157,7 +156,6 @@ class Descript:
                 loop_to_axis[key] = key
 
             self._check_unroll_parameter_domain(sched)
-            self._check_split_parameter_domain(sched)
             self._check_tile_parameter_domain(sched)
 
             self._check_unrolling_tiling(sched)
@@ -216,26 +214,6 @@ class Descript:
                 raise Exception(
                     f'Unroll parameter should be strictly positive: "{axis}" = {{"unroll" = {param}}}.'
                 )
-
-    def _check_split_parameter_domain(self, sched: dict[str, Any]):
-        """Procedure that check if the splitting parameters domain are correct
-        Splitting parameters should be positive and only one should be at 0 and they should be unique"""
-        parameters_value = dict()
-
-        splits = sched["splits"]
-        for axis, ctx in splits.items():
-            for loop_name, param in ctx.items():
-                if param in parameters_value.values():  # Starting point already used
-                    raise Exception(
-                        f"Multiple splits on axis {axis} have the same starting point {param}"
-                    )
-                else:
-                    parameters_value[loop_name] = param
-
-        if (
-            len(parameters_value.values()) > 0 and 0 not in parameters_value.values()
-        ):  # The starting point is not 0 on a splitted axis
-            raise Exception("No starting point found in split")
 
     def _check_tile_parameter_domain(self, sched: dict[str, Any]):
         """Procedure that check if the tiles parameters domains are correct
