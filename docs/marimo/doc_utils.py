@@ -13,7 +13,7 @@ class DocUtils:
         compiler:str="gcc",
     ) -> None:
         self.compiler = [compiler]
-        self.file_to_delete = set()
+        self.file_to_delete: set[str] = set()
 
     def create_output_file(self) -> str:
         file_descriptor, file_name = mkstemp()

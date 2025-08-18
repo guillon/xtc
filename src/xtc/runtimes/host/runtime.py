@@ -10,6 +10,7 @@ import threading
 import shlex
 import logging
 from pathlib import Path
+from typing import Any
 
 __all__ = [
     "compile_runtime",
@@ -31,7 +32,7 @@ class _c_ascii_str:
         return ctypes.c_char_p.from_param(obj)
 
 
-_runtime_funcs = {
+_runtime_funcs: dict[str, dict[str, Any]] = {
     "evaluate": {
         "sym": "evaluate",
         "argtypes": [
@@ -183,7 +184,7 @@ def _compile():
 
 
 _runtime_entries_lock = threading.Lock()
-_runtime_entries = None
+_runtime_entries: dict | None = None
 
 
 def _resolve_runtime():
