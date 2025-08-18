@@ -1,5 +1,4 @@
 // RUN: mlir-loop --no-alias --print-source-ir %s 2>&1 | filecheck %s
-// UNSUPPORTED
 
 func.func @matmul(%A: memref<256x512xf64>, %B: memref<512x256xf64>, %C: memref<256x256xf64>){
 	linalg.matmul {
