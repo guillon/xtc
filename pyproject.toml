@@ -1,7 +1,7 @@
 [project]
 name = "xtc"
 version = "0.2.dev1"
-dependencies = ['jinja2', 'matplotlib', 'numpy', 'ordered-set', 'py-cpuinfo', 'tqdm', 'typing_extensions', 'pyyaml','lit','filecheck','xdsl~=0.26.0', "marimo"]
+dependencies = ['jinja2', 'matplotlib', 'numpy', 'ordered-set', 'py-cpuinfo', 'tqdm', 'typing_extensions', 'pyyaml','lit','filecheck','xdsl~=0.26.0']
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
@@ -15,6 +15,7 @@ dev = [
     "mypy==1.15.0",
     "pytest",
     "pyright==1.1.402",
+    "marimo==0.14.16",
 ]
 
 [tool.setuptools]
@@ -50,6 +51,7 @@ reportIncompatibleMethodOverride = "error"
 reportArgumentType = "error"
 reportReturnType = "error"
 reportAbstractUsage = "error"
+reportUnusedExpression = false
 # Those are too strict
 #reportMissingTypeArgument = "error"
 reportUnusedImport = "error"
