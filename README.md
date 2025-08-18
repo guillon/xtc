@@ -43,7 +43,7 @@ configure your system to access counters with: `sudo sysctl kernel.perf_event_pa
 ### MLIR Backend Requirements
 
 For the MLIR backend, install the python packages for MLIR dependencies
-(maintained at https://gitlab.inria.fr/CORSE/mlir-wheels):
+(maintained at https://gitlab.inria.fr/CORSE/mlir-bindings-wheels and https://gitlab.inria.fr/CORSE/xtc-mlir-bindings-wheels):
 
     pip install -r mlir_requirements.txt
 
@@ -83,6 +83,10 @@ Add the tools to your `PATH` and the python bindings to your `PYTHONPATH`:
     export PATH=$HOME/install/llvm
     export PYTHONPATH=$PYTHONPATH:$HOME/install/llvm/python_packages/mlir_core
 
+Some features of XTC also require an out-of-tree project named XTC-MLIR.
+It is installed automatically using the mlir_requirements.txt file.
+For manual building and installation, please follow the README at https://gitlab.inria.fr/CORSE/xtc-mlir.
+Note: The prebuilt XTC-MLIR package comes with its own version of the libLLVM.so
 
 ### TVM backend requirements
 
