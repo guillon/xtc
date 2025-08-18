@@ -251,7 +251,7 @@ class XTCOperConv2D(XTCOperator):
     def forward_types(
         self, inputs_types: Sequence[TensorType]
     ) -> Sequence[XTCTensorType]:
-        # TODO: assume (HWC, RSCF) inputs and HWF output
+        # TODO: assume (NHWC, RSCF) inputs and HWF output
         assert len(inputs_types) == 2
         assert inputs_types[0].shape is not None
         assert inputs_types[1].shape is not None
@@ -261,7 +261,7 @@ class XTCOperConv2D(XTCOperator):
         weight_shape = cast(XTCTensorType, inputs_types[1]).constant_shape
         h, w, c = inp_shape[-3:]
         r, s, wc, f = weight_shape
-        assert c == wc
+        assert c == wc, f"unexpected with shapes: {inp_shape = }, {weight_shape = }"
         sh, sw = self._stride
         oh, ow = (h - r) // sh + 1, (w - s) // sw + 1
         return [
@@ -431,3 +431,54 @@ class XTCOperReshape(XTCOperator):
             f"output type mismatch expect: {reshaped.type} != {expected_type}"
         )
         return [reshaped]
+
+
+class XTCOperTranspose(XTCOperator):
+    def __init__(self, **attrs: XTCOperatorAttr) -> None:
+        axes = attrs.get("axes", ())
+        super().__init__("transpose", axes=axes)
+
+    @override
+    def forward_types(
+        self, inputs_types: Sequence[TensorType]
+    ) -> Sequence[XTCTensorType]:
+        assert inputs_types[0].shape is not None
+        shape = cast(XTCTensorType, inputs_types[0]).constant_shape
+        if self.attrs.axes == ():
+            out_shape = shape[::-1]
+        else:
+            assert len(self.attrs.axes) == len(shape)
+            out_shape = tuple([shape[n] for n in self.attrs.axes])
+        return [
+            XTCTensorType(
+                shape=out_shape,
+                dtype=inputs_types[0].dtype,
+            ),
+        ]
+
+    @override
+    def forward(self, inputs: Sequence[Tensor]) -> Sequence[XTCTensor]:
+        axes = self.attrs.axes if self.attrs.axes != () else None
+        transposed = XTCTensor(inputs[0].numpy().transpose(axes))
+        expected_type = self.forward_types([inp.type for inp in inputs])[0]
+        assert transposed.type == expected_type, (
+            f"output type mismatch expect: {transposed.type} != {expected_type}"
+        )
+        return [transposed]
+
+    @override
+    def get_operation(
+        self,
+        inps_types: Sequence[XTCTensorType],
+        outs_types: Sequence[XTCTensorType],
+    ) -> XTCOperation:
+        inp_shape = inps_types[0].constant_shape
+        i = functools.reduce(operator.mul, inp_shape, 1)
+        return self._get_operation(
+            inps_types,
+            outs_types,
+            dims={"i": i},
+            kinds=("P",),
+            inps_maps=(("i",)),
+            outs_maps=(("i",)),
+        )
