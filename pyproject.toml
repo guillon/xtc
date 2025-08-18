@@ -1,7 +1,7 @@
 [project]
 name = "xtc"
 version = "0.2.dev1"
-dependencies = ['jinja2', 'matplotlib', 'numpy', 'ordered-set', 'py-cpuinfo', 'tqdm', 'typing_extensions', 'pyyaml','lit','filecheck','xdsl~=0.26.0', "marimo"]
+dependencies = ['jinja2', 'matplotlib', 'numpy', 'ordered-set', 'py-cpuinfo', 'tqdm', 'typing_extensions', 'pyyaml','lit','filecheck','xdsl~=0.26.0']
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
@@ -15,6 +15,7 @@ dev = [
     "mypy==1.15.0",
     "pytest",
     "pyright==1.1.402",
+    "marimo==0.14.16",
 ]
 
 [tool.setuptools]
@@ -40,7 +41,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.pyright]
 pythonVersion = "3.10"
-include = ["src/xtc/itf", "src/xtc/backends", "src/xtc/graphs", "src/xtc/search", "docs/marimo"]
+include = ["src/xtc/itf", "src/xtc/backends", "src/xtc/graphs", "src/xtc/search", "src/xtc/runtimes", "docs/marimo"]
 reportMissingParameterType = "error"
 reportImplicitOverride = "error"
 reportUninitializedInstanceVariable = "error"
@@ -50,14 +51,16 @@ reportIncompatibleMethodOverride = "error"
 reportArgumentType = "error"
 reportReturnType = "error"
 reportAbstractUsage = "error"
+reportUnusedExpression = false
 # Those are too strict
 #reportMissingTypeArgument = "error"
 reportUnusedImport = "error"
 
 [tool.mypy]
 python_version = "3.10"
-packages = ["xtc.itf", "xtc.backends", "xtc.graphs", "xtc.search"]
+packages = ["xtc.itf", "xtc.backends", "xtc.graphs", "xtc.search", "xtc.runtimes", "docs.marimo"]
 ignore_missing_imports = true
+check_untyped_defs = true
 
 [tool.coverage.run]
 branch = true

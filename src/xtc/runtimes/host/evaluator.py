@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
-import numpy as np
+from typing import Any
 import ctypes
 
 from .runtime import (
-    evaluate,
-    evaluate_packed,
+    evaluate_perf,
+    evaluate_packed_perf,
 )
 
 __all__ = [
@@ -49,13 +49,13 @@ CPackedFunc = ctypes.CFUNCTYPE(
 
 
 class CFunc:
-    def __init__(self, f, packed=False):
+    def __init__(self, f: Any, packed: bool = False) -> None:
         self.handle = f
         self.is_packed = packed or (
             hasattr(self.handle, "packed") and self.handle.packed
         )
 
-    def arg_tuple(self, arg):
+    def arg_tuple(self, arg: Any) -> Any:
         if arg.__class__.__name__ == "ndarray":  # Numpy Array
             assert not self.is_packed
             return (arg.ctypes.data_as(ctypes.c_voidp), ArgTypeCode.HANDLE)
@@ -73,10 +73,10 @@ class CFunc:
         else:
             assert 0, f"Unsupported argument class: {arg.__class__.__name__}"
 
-    def args_tuples(self, args):
+    def args_tuples(self, args: Any) -> list[Any]:
         return [self.arg_tuple(arg) for arg in args]
 
-    def __call__(self, *args):
+    def __call__(self, *args: Any):
         args_tuples = self.args_tuples(args)
         if self.is_packed:
             args_array = (CArgValue * len(args_tuples))(
@@ -100,39 +100,61 @@ class CFunc:
 
 
 class Evaluator:
-    def __init__(self, f, repeat=1, number=1, min_repeat_ms=0):
+    def __init__(
+        self,
+        f: Any,
+        repeat: int = 1,
+        number: int = 1,
+        min_repeat_ms: int = 0,
+        pmu_counters: list[str] = [],
+    ) -> None:
         assert repeat > 0
         assert number > 0
         assert min_repeat_ms >= 0
         self.repeat = repeat
         self.number = number
         self.min_repeat_ms = min_repeat_ms
+        self.pmu_counters = pmu_counters
         self.cfunc = CFunc(f)
 
-    def __call__(self, *args):
+    def _str_list_to_c(self, str_list: list[str]) -> Any:
+        return (ctypes.c_char_p * len(str_list))(
+            *[str.encode("utf-8") for str in str_list]
+        )
+
+    def __call__(self, *args: Any) -> list[float]:
         args_tuples = self.cfunc.args_tuples(args)
-        results_array = (ctypes.c_double * self.repeat)()
+        values_num = 1
+        if len(self.pmu_counters) > 0:
+            values_num = len(self.pmu_counters)
+        results_array = (ctypes.c_double * (self.repeat * values_num))()
         if self.cfunc.is_packed:
-            args_array = (CArgValue * len(args_tuples))(
+            args_array_packed = (CArgValue * len(args_tuples))(
                 *[arg[0] for arg in args_tuples]
             )
-            args_codes = (CArgCode * len(args_tuples))(*[arg[1] for arg in args_tuples])
-            evaluate_packed(
+            args_codes_packed = (CArgCode * len(args_tuples))(
+                *[arg[1] for arg in args_tuples]
+            )
+            evaluate_packed_perf(
                 ctypes.cast(results_array, ctypes.POINTER(ctypes.c_double)),
+                ctypes.c_int(len(self.pmu_counters)),
+                self._str_list_to_c(self.pmu_counters),
                 ctypes.c_int(self.repeat),
                 ctypes.c_int(self.number),
                 ctypes.c_int(self.min_repeat_ms),
                 ctypes.cast(self.cfunc.handle, ctypes.CFUNCTYPE(ctypes.c_voidp)),
-                ctypes.cast(args_array, ctypes.POINTER(ctypes.c_voidp)),
-                ctypes.cast(args_codes, ctypes.POINTER(ctypes.c_int)),
+                ctypes.cast(args_array_packed, ctypes.POINTER(ctypes.c_voidp)),
+                ctypes.cast(args_codes_packed, ctypes.POINTER(ctypes.c_int)),
                 ctypes.c_int(len(args_tuples)),
             )
         else:
             args_array = (ctypes.c_voidp * len(args_tuples))(
                 *[arg[0] for arg in args_tuples]
             )
-            evaluate(
+            evaluate_perf(
                 ctypes.cast(results_array, ctypes.POINTER(ctypes.c_double)),
+                ctypes.c_int(len(self.pmu_counters)),
+                self._str_list_to_c(self.pmu_counters),
                 ctypes.c_int(self.repeat),
                 ctypes.c_int(self.number),
                 ctypes.c_int(self.min_repeat_ms),
@@ -140,12 +162,12 @@ class Evaluator:
                 ctypes.cast(args_array, ctypes.POINTER(ctypes.c_voidp)),
                 ctypes.c_int(len(args_tuples)),
             )
-        return np.array(results_array, dtype="float64")
+        return [float(x) for x in results_array]
 
 
 class Executor:
-    def __init__(self, f):
+    def __init__(self, f: Any) -> None:
         self.func = CFunc(f)
 
-    def __call__(self, *args):
+    def __call__(self, *args: Any) -> None:
         self.func(*args)

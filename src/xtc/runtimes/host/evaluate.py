@@ -28,6 +28,7 @@ def load_and_evaluate(
     repeat = kwargs.get("repeat", 1)
     number = kwargs.get("number", 1)
     min_repeat_ms = kwargs.get("min_repeat_ms", 0)
+    pmu_counters = kwargs.get("pmu_counters", [])
     with LibLoader(dll) as lib:
         func = getattr(lib, sym)
         assert func is not None, f"Cannot find symbol {sym} in lib {dll}"
@@ -41,10 +42,14 @@ def load_and_evaluate(
                 if not np.allclose(out_ref, out):
                     return [], 1, "Error in validation: outputs differ"
         eval_func = Evaluator(
-            func, repeat=repeat, min_repeat_ms=min_repeat_ms, number=number
+            func,
+            repeat=repeat,
+            min_repeat_ms=min_repeat_ms,
+            number=number,
+            pmu_counters=pmu_counters,
         )
         results = eval_func(*parameters[0], *parameters[1])
-    return results.tolist(), 0, ""
+    return results, 0, ""
 
 
 def load_and_execute(
@@ -53,7 +58,7 @@ def load_and_execute(
     payload_name: str,
     **kwargs: Any,
 ) -> int:
-    results, code, err_msg = load_and_evaluate(
+    _, code, _ = load_and_evaluate(
         module_file,
         module_name,
         payload_name,
