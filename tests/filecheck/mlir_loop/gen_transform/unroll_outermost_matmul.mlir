@@ -1,5 +1,4 @@
 // RUN: mlir-loop --no-alias --print-source-ir %s 2>&1 | filecheck %s
-// XFAIL: mlir-target=c
 
 func.func @myfun(
   %A: memref<8x64xf32>,

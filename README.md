@@ -94,7 +94,7 @@ XTC supports multiple MLIR Targets for the code generation:
   - llvmir (default)
   - c
 
-To force the use of a specific target, you can set the env variable MLIR_TARGET=<mlir-target>.
+To force the use of a specific target, you can set the env variable XTC_MLIR_TARGET=<mlir-target>.
 
 ### TVM backend requirements
 
@@ -131,6 +131,7 @@ Validate installation by launching lit tests and pytest tests:
 
     lit tests/filecheck
     pytest tests
+
 
 ## Exploration
 

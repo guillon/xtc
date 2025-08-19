@@ -100,6 +100,8 @@ llc_opts = [
 
 opt_opts = ["-O3", "--enable-unsafe-fp-math", "--fp-contract=fast"]
 
+target_cc_opts = ["-O3", "-ffast-math", "--fp-contract=fast"]
+
 cc_opts = ["-O3", "-march=native"]
 
 shared_lib_opts = ["--shared", *cc_opts]
@@ -126,6 +128,8 @@ mlirrunner_opts = [
 objdump_bin = "x86_64-linux-gnu-objdump"
 
 objdump_arm_bin = "aarch64-linux-gnu-objdump"
+
+target_cc_bin = "cc"
 
 cc_bin = "cc"
 

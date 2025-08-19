@@ -1,5 +1,4 @@
 // RUN: mlir-loop --no-alias --print-transformed-ir %s 2>&1 | grep "vector\." | filecheck %s
-// XFAIL: mlir-target=c
 
 func.func @myfun(
   %A: memref<256x512xf32>,

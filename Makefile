@@ -10,8 +10,8 @@ check-mypy:
 
 check-lit:
 	lit -v tests/filecheck
-	env XTC_MLIR_TARGET=c lit tests/filecheck/backends
-	env XTC_MLIR_TARGET=c lit tests/filecheck/mlir_loop
+	env XTC_MLIR_TARGET=c lit -v tests/filecheck/backends
+	env XTC_MLIR_TARGET=c lit -v tests/filecheck/mlir_loop
 
 check-pytest:
 	scripts/pytest/run_pytest.sh -v tests/pytest

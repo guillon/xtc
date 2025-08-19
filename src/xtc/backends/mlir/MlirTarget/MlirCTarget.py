@@ -19,10 +19,11 @@ from xtc.utils.ext_tools import (
     system_libs,
     objdump_bin,
     objdump_arm_bin,
+    target_cc_bin,
     cc_bin,
     objdump_opts,
     objdump_color_opts,
-    cc_opts,
+    target_cc_opts,
 )
 
 from xtc.targets.host import HostModule
@@ -102,10 +103,12 @@ class MlirCTarget(MlirTarget):
 
         cc_pic = ["-fPIC"] if self._config.shared_lib else []
         cc_crt_inc = [f"-I{self._config.mlir_install_dir}/runtime/include"]
-        cc_arch = [f"-march={self._config.arch}", f"-mtune={self._config.cpu}"]
+        cc_arch = [f"-march={self._config.cpu}", f"-mtune={self._config.cpu}"]
+        # FIXME Some options may change between a GCC and a LLVM based compiler
+        # This works for GCC 12 for x86
         cc_cmd = (
-            self.cmd_cc
-            + cc_opts
+            self.cmd_target_cc
+            + target_cc_opts
             + cc_arch
             + cc_pic
             + cc_crt_inc
@@ -199,6 +202,10 @@ class MlirCTarget(MlirTarget):
         to_std_pass.run()
         if self._config.print_lowered_ir:
             self.dump_ir(mlir_program, "IR Dump After MLIR Opt")
+
+    @property
+    def cmd_target_cc(self):
+        return [target_cc_bin]
 
     @property
     def cmd_cc(self):

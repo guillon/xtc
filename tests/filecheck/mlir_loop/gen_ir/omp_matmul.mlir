@@ -1,5 +1,4 @@
 // RUN: mlir-loop --no-alias --print-lowered-ir %s 2>&1 | grep omp | filecheck %s
-// XFAIL: mlir-target=c
 
 func.func @myfun(
   %A: memref<256x512xf32>,
@@ -24,7 +23,7 @@ func.func @myfun(
 }
 // CHECK:      omp.parallel {
 // CHECK-NEXT: omp.wsloop {
-// CHECK-NEXT: omp.loop_nest (%{{.*}}) : i64 = (%{{.*}}) to (%{{.*}}) step (%{{.*}}) {
+// CHECK-NEXT: omp.loop_nest (%{{.*}}) : {{i64|index}} = (%{{.*}}) to (%{{.*}}) step (%{{.*}}) {
 // CHECK-NEXT: omp.yield
 // CHECK-NEXT: omp.terminator
 // CHECK-NEXT: omp.terminator
