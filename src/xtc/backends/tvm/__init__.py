@@ -14,3 +14,5 @@ from .TVMScheduler import (
     TVMScheduler,  # type: ignore
     TVMSchedule,  # type: ignore
 )
+
+from .TVMBackend import TVMBackend as Backend  # type: ignore

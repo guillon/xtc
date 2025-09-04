@@ -38,6 +38,7 @@ class BaseStrategy(Strategy):
         vec_size: int = 16,
         max_unroll: int = 256,
         threads: int = 1,
+        max_parallelize: int = 1,
         **kwargs: Any,
     ) -> None:
         self._graph = graph
@@ -48,6 +49,7 @@ class BaseStrategy(Strategy):
         self._op = graph.outputs_nodes[0].operation
         self._stats: dict[str, int] = {}
         self._parallelize = self._threads > 1
+        self._max_parallelize = max_parallelize
         self._vectorize = self._vec_size > 1
         self._unroll = self._max_unroll != 0
         # TODO: should go into some machine description
@@ -78,10 +80,13 @@ class BaseStrategy(Strategy):
     def _generate(self, sch: Scheduler, in_x: list[int]) -> None: ...
 
     @abstractmethod
-    def _exhaustive(self) -> Iterator[VecSample]: ...
-
-    @abstractmethod
     def _default_schedule(self, opt_level: int) -> list[int]: ...
+
+    def _exhaustive(self) -> Iterator[VecSample]:
+        inds = self._independents()
+        samples = self._iter_product(inds, stat="all")
+        filtered = self._filter(samples)
+        return filtered
 
     @property
     def stats(self) -> Mapping[str, int]:
@@ -92,11 +97,13 @@ class BaseStrategy(Strategy):
         return sizes
 
     def _iter_product(
-        self, args: Sequence[Sequence[Sequence[int]]], stat: str
+        self, args: Sequence[Sequence[Sequence[int]]], stat: str | None = None
     ) -> Iterator[VecSample]:
-        self._stats[stat] = 0
+        if stat:
+            self._stats[stat] = 0
         for x in itertools.product(*args):
-            self._stats[stat] += 1
+            if stat:
+                self._stats[stat] += 1
             yield list(itertools.chain(*x))
 
     def _vector_axis(self) -> str | None:
@@ -108,11 +115,12 @@ class BaseStrategy(Strategy):
         indexes: list[int],
         v_index: int | None,
         samples: Iterator[VecSample],
-        stat: str,
+        stat: str | None = None,
     ) -> Iterator[VecSample]:
         # Filter inner n_axes unrolled tiles if > max_unroll
         # assuming inner is vectorized
-        self._stats[stat] = 0
+        if stat:
+            self._stats[stat] = 0
         if self._max_unroll < 0:
             yield from samples
             return
@@ -121,8 +129,47 @@ class BaseStrategy(Strategy):
             inner_unroll = np.prod(inners)
             vec_size = min(x[v_index] if v_index is not None else 1, self._vec_size)
             if inner_unroll / vec_size <= self._max_unroll:
-                self._stats[stat] += 1
+                if stat:
+                    self._stats[stat] += 1
                 yield x
+
+    def sample(self, num: int, seed: int | None = 0) -> Iterator[VecSample]:
+        return self._sample(num, seed)
+
+    def _sample_product(
+        self, inds: list[list[list[int]]], num: int, rng: np.random.Generator
+    ) -> list[VecSample]:
+        draw = np.hstack(
+            [np.array(var)[rng.integers(len(var), size=num)] for var in inds]
+        )
+        return draw.tolist()
+
+    def _sample(self, num: int, seed: int | None = 0) -> Iterator[VecSample]:
+        rng = np.random.default_rng(seed=seed)
+        inds = self._independents()
+        seen = set()
+        all_samples = []
+        null_updates = 0
+        null_updates_limit = 1000
+        while len(all_samples) < num and null_updates < null_updates_limit:
+            samples = self._sample_product(inds, num, rng)
+            filtered = self._filter(iter(samples))
+            new_samples = []
+            for sample in filtered:
+                uid = tuple(sample)
+                if uid not in seen:
+                    new_samples.append(sample)
+                    seen.add(uid)
+            if len(new_samples) == 0:
+                null_updates += 1
+            all_samples.extend(new_samples)
+        return iter(all_samples[:num])
+
+    @abstractmethod
+    def _independents(self) -> list[list[list[int]]]: ...
+
+    @abstractmethod
+    def _filter(self, samples: Iterator[VecSample]) -> Iterator[VecSample]: ...
 
 
 class Strategy_P1(BaseStrategy):
@@ -192,11 +239,12 @@ class Strategy_P1(BaseStrategy):
         indexes: list[int],
         v_index: int | None,
         samples: Iterator[VecSample],
-        stat: str,
+        stat: str | None = None,
     ) -> Iterator[VecSample]:
         # Filter inner n_axes unrolled tiles if > max_unroll
         # assuming inner is vectorized
-        self._stats[stat] = 0
+        if stat:
+            self._stats[stat] = 0
         if self._max_unroll < 0:
             yield from samples
             return
@@ -208,11 +256,12 @@ class Strategy_P1(BaseStrategy):
             vsize = vsize if x[-1] in self._valid_vector_idx else 1
             vec_size = min(vsize, self._vec_size)
             if inner_unroll / vec_size <= self._max_unroll:
-                self._stats[stat] += 1
+                if stat:
+                    self._stats[stat] += 1
                 yield x
 
     @override
-    def _exhaustive(self) -> Iterator[VecSample]:
+    def _independents(self) -> list[list[list[int]]]:
         # TODO: ref above, only support matmult like
         assert len(self._constant_sizes()) == 3
         i, j, k = self._constant_sizes().values()
@@ -220,15 +269,14 @@ class Strategy_P1(BaseStrategy):
         tiles_j = factors_enumeration(j, 1)
         tiles_k = factors_enumeration(k, 1)
         orders = [[x] for x in range(len(self._permutations))]
-        all_samples = self._iter_product(
-            [tiles_i, tiles_j, tiles_k, orders], stat="all"
-        )
+        return [tiles_i, tiles_j, tiles_k, orders]
+
+    @override
+    def _filter(self, samples: Iterator[VecSample]) -> Iterator[VecSample]:
         v_index = 1  # index of j1
         indexes = [0, 1, 2]  # indexs of i1, j1, k1
-        filtered_samples = self._filter_unroll(
-            indexes, v_index, all_samples, stat="filtered"
-        )
-        return filtered_samples
+        samples = self._filter_unroll(indexes, v_index, samples, stat="filtered")
+        return samples
 
     @override
     def _default_schedule(self, opt_level: int) -> list[int]:
@@ -263,10 +311,8 @@ class Strategy_P1v(Strategy_P1):
         super().__init__(graph, **kwargs)
 
     @override
-    def _exhaustive(self) -> Iterator[VecSample]:
-        # TODO: ref above, only support matmult like
-        assert len(self._constant_sizes()) == 3
-        samples = super()._exhaustive()
+    def _filter(self, samples: Iterator[VecSample]) -> Iterator[VecSample]:
+        samples = super()._filter(samples)
         # Keep only vectorized dims, i.e. good permutation and j1 >= VEC_SIZE
         vidx = 1  # index of j1
         for x in samples:
@@ -425,12 +471,11 @@ class BaseStrategyPRTScheme(BaseStrategy):
     def _init_parallel(self) -> list[str]:
         if not self._parallelize:
             return []
-        max_parallelized = 1
         parallel = []
         # Ensure that the parallel axes are the outer axes
         # (i.e. not sub tiles) and are parallel
         for idx, axis in enumerate(self._order):
-            if idx >= max_parallelized:
+            if self._max_parallelize >= 0 and idx >= self._max_parallelize:
                 break
             if self._base_axis[axis] != axis:
                 break
@@ -460,10 +505,11 @@ class BaseStrategyPRTScheme(BaseStrategy):
         return indexes
 
     def _filter_vectorized(
-        self, samples: Iterator[VecSample], stat: str
+        self, samples: Iterator[VecSample], stat: str | None = None
     ) -> Iterator[VecSample]:
         # Filter vectorized samples, i.e. vector tile >= VEC_SIZE
-        self._stats[stat] = 0
+        if stat:
+            self._stats[stat] = 0
         vaxis = self._vectorized[0] if self._vectorized else ""
         vsize = self._vec_size
         base_size = self._sizes[self._base_axis[vaxis]] if vaxis else 1
@@ -473,65 +519,72 @@ class BaseStrategyPRTScheme(BaseStrategy):
         vidx = self._tiles_idx[vaxis]
         for x in samples:
             if x[vidx] >= vsize:
-                self._stats[stat] += 1
+                if stat:
+                    self._stats[stat] += 1
                 yield x
 
     def _filter_reg_num(
-        self, samples: Iterator[VecSample], inner_items: int, stat: str
+        self, samples: Iterator[VecSample], inner_items: int, stat: str | None = None
     ) -> Iterator[VecSample]:
         # Filter inner items <= VEC_SIZE * REG_NUM
-        self._stats[stat] = 0
+        if stat:
+            self._stats[stat] = 0
         indexes = self._inner_items_indexes(-inner_items)
         max_vreg = self._arch_vreg_num
         for x in samples:
             elts = np.prod(np.array(x)[indexes])
             if not elts <= self._vec_size * max_vreg:
                 continue
-            self._stats[stat] += 1
+            if stat:
+                self._stats[stat] += 1
             yield x
 
     def _filter_l1_size(
-        self, samples: Iterator[VecSample], inner_items: int, stat: str
+        self, samples: Iterator[VecSample], inner_items: int, stat: str | None = None
     ) -> Iterator[VecSample]:
         # Filter inner items <= MAX_L1_ELTS
-        self._stats[stat] = 0
+        if stat:
+            self._stats[stat] = 0
         indexes = self._inner_items_indexes(-inner_items)
         max_l1_elts = self._arch_l1_size / 4  # where 4 is float size (TODO)
         for x in samples:
             elts = np.prod(np.array(x)[indexes])
             if not elts <= max_l1_elts:
                 continue
-            self._stats[stat] += 1
+            if stat:
+                self._stats[stat] += 1
             yield x
 
     def _filter_l2_size(
-        self, samples: Iterator[VecSample], inner_items: int, stat: str
+        self, samples: Iterator[VecSample], inner_items: int, stat: str | None = None
     ) -> Iterator[VecSample]:
         # Filter inner items <= MAX_L1_ELTS
-        self._stats[stat] = 0
+        if stat:
+            self._stats[stat] = 0
         indexes = self._inner_items_indexes(-inner_items)
         max_l2_elts = self._arch_l2_size / 4  # where 4 is float size (TODO)
         for x in samples:
             elts = np.prod(np.array(x)[indexes])
             if not elts <= max_l2_elts:
                 continue
-            self._stats[stat] += 1
+            if stat:
+                self._stats[stat] += 1
             yield x
 
     @override
-    def _exhaustive(self) -> Iterator[VecSample]:
+    def _independents(self) -> list[list[list[int]]]:
         tiles = [
             factors_enumeration(self._sizes[axis], level - 1)
             for axis, level in self._tiles_levels.items()
         ]
         w_bools = [[[0], [1]]] * len(self._w_axes)
-        all_samples = self._iter_product(tiles + w_bools, stat="all")
+        return tiles + w_bools
+
+    @override
+    def _filter(self, samples: Iterator[VecSample]) -> Iterator[VecSample]:
         indexes = self._unrolled_indexes()
         v_index = self._vector_index()
-        filtered_samples = self._filter_unroll(
-            indexes, v_index, all_samples, stat="filtered"
-        )
-        return filtered_samples
+        return self._filter_unroll(indexes, v_index, samples, stat="filtered")
 
     @override
     def _generate(self, sch: Scheduler, in_x: list[int]) -> None:
@@ -542,6 +595,11 @@ class BaseStrategyPRTScheme(BaseStrategy):
             factors = in_x[idx : idx + nfactors]
             sizes = factors_to_sizes(factors)
             tilings[axis] = {f"{axis}{idx + 1}": size for idx, size in enumerate(sizes)}
+        buffers = [
+            axis
+            for idx, axis in enumerate(self._w_axes)
+            if in_x[-len(self._w_axes) + idx] != 0
+        ]
         axes_order = self._order
         parallel_axes = self._parallel
         vector_axes = self._vectorized
@@ -552,8 +610,8 @@ class BaseStrategyPRTScheme(BaseStrategy):
         sch.parallelize(parallel_axes)
         sch.vectorize(vector_axes)
         sch.unroll(unroll_axes)
-        for w_axis in self._w_axes:
-            sch.buffer_at(w_axis)
+        for axis in buffers:
+            sch.buffer_at(axis)
 
     def _check_divisibility_from_tiles(self, tiles: dict[str, int]) -> bool:
         divisible = all(
@@ -680,8 +738,8 @@ class Strategy_PPRPRPv(Strategy_PPRPRP):
         super().__init__(graph, **kwargs)
 
     @override
-    def _exhaustive(self) -> Iterator[VecSample]:
-        samples = super()._exhaustive()
+    def _filter(self, samples: Iterator[VecSample]) -> Iterator[VecSample]:
+        samples = super()._filter(samples)
         samples = self._filter_vectorized(samples, "filtered_vec")
         return samples
 
@@ -703,8 +761,8 @@ class Strategy_PPRPRPvr(Strategy_PPRPRP):
         super().__init__(graph, **kwargs)
 
     @override
-    def _exhaustive(self) -> Iterator[VecSample]:
-        samples = super()._exhaustive()
+    def _filter(self, samples: Iterator[VecSample]) -> Iterator[VecSample]:
+        samples = super()._filter(samples)
         samples = self._filter_vectorized(samples, "filtered_vec")
         samples = self._filter_reg_num(samples, 1, "filtered_reg")
         samples = self._filter_l1_size(samples, 2, "filtered_l1")
@@ -735,8 +793,8 @@ class Strategy_PPWRPRPv(Strategy_PPWRPRP):
         super().__init__(graph, **kwargs)
 
     @override
-    def _exhaustive(self) -> Iterator[VecSample]:
-        samples = super()._exhaustive()
+    def _filter(self, samples: Iterator[VecSample]) -> Iterator[VecSample]:
+        samples = super()._filter(samples)
         samples = self._filter_vectorized(samples, "filtered_vec")
         return samples
 
@@ -752,8 +810,8 @@ class Strategy_PPWRPRPvr(Strategy_PPWRPRP):
         super().__init__(graph, **kwargs)
 
     @override
-    def _exhaustive(self) -> Iterator[VecSample]:
-        samples = super()._exhaustive()
+    def _filter(self, samples: Iterator[VecSample]) -> Iterator[VecSample]:
+        samples = super()._filter(samples)
         samples = self._filter_vectorized(samples, "filtered_vec")
         samples = self._filter_reg_num(samples, 1, "filtered_reg")
         samples = self._filter_l1_size(samples, 2, "filtered_l1")

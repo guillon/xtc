@@ -78,6 +78,10 @@ class XTCExpr(ABC):
 
     @property
     @abstractmethod
+    def op(self) -> XTCOperator: ...
+
+    @property
+    @abstractmethod
     def op_name(self) -> str: ...
 
     @property
@@ -152,6 +156,11 @@ class XTCTensorExpr(XTCValueExpr):
 
     @property
     @override
+    def op(self) -> XTCOperTensor:
+        return self._op
+
+    @property
+    @override
     def op_name(self) -> str:
         return self._op.name
 
@@ -184,6 +193,11 @@ class XTCOpExpr(XTCExpr):
         super().__init__()
         self._op = op
         self._args = args
+
+    @property
+    @override
+    def op(self) -> XTCOperator:
+        return self._op
 
     @property
     @override

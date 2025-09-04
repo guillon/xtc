@@ -54,24 +54,24 @@ print(f"CODE: {res}")
 # CHECK-NEXT:      @T.prim_func
 # CHECK-NEXT:      def main(_0: T.Buffer((4, 512), "float32"), _1: T.Buffer((512, 32), "float32"), T_reshape: T.Buffer((4, 32), "float32")):
 # CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          matmul = T.allocate([128], "float32", "global")
+# CHECK-NEXT:          matmul_ = T.allocate([128], "float32", "global")
 # CHECK-NEXT:          for i, j in T.grid(4, 32):
-# CHECK-NEXT:              matmul_1 = T.Buffer((128,), data=matmul)
-# CHECK-NEXT:              matmul_1[i * 32 + j] = T.float32(0.0)
+# CHECK-NEXT:              matmul__1 = T.Buffer((128,), data=matmul_)
+# CHECK-NEXT:              matmul__1[i * 32 + j] = T.float32(0.0)
 # CHECK-NEXT:              for k in range(512):
 # CHECK-NEXT:                  cse_var_1: T.int32 = i * 32 + j
 # CHECK-NEXT:                  _0_1 = T.Buffer((2048,), data=_0.data)
 # CHECK-NEXT:                  _1_1 = T.Buffer((16384,), data=_1.data)
-# CHECK-NEXT:                  matmul_1[cse_var_1] = matmul_1[cse_var_1] + _0_1[i * 512 + k] * _1_1[k * 32 + j]
-# CHECK-NEXT:          matmul_1 = T.Buffer((128,), data=matmul)
+# CHECK-NEXT:                  matmul__1[cse_var_1] = matmul__1[cse_var_1] + _0_1[i * 512 + k] * _1_1[k * 32 + j]
+# CHECK-NEXT:          matmul__1 = T.Buffer((128,), data=matmul_)
 # CHECK-NEXT:          for i in range(128):
-# CHECK-NEXT:              matmul_2 = T.Buffer((128,), data=matmul)
-# CHECK-NEXT:              matmul_1[i] = T.max(T.float32(0.0), matmul_2[i])
+# CHECK-NEXT:              matmul__2 = T.Buffer((128,), data=matmul_)
+# CHECK-NEXT:              matmul__1[i] = T.max(T.float32(0.0), matmul__2[i])
 # CHECK-NEXT:          for ax0, ax1 in T.grid(4, 32):
 # CHECK-NEXT:              cse_var_2: T.int32 = ax0 * 32 + ax1
 # CHECK-NEXT:              T_reshape_1 = T.Buffer((128,), data=T_reshape.data)
-# CHECK-NEXT:              T_reshape_1[cse_var_2] = matmul_1[cse_var_2]
-# CHECK-NEXT:  O = obj['matmul']
+# CHECK-NEXT:              T_reshape_1[cse_var_2] = matmul__1[cse_var_2]
+# CHECK-NEXT:  O = obj['matmul_']
 # CHECK-NEXT:  i, j, = O.op.axis
 # CHECK-NEXT:  k, = O.op.reduce_axis
 # CHECK-NEXT:  i, i1 = sch[O].split(i, factor=2)
@@ -88,12 +88,12 @@ print(f"CODE: {res}")
 # CHECK-NEXT:      @T.prim_func
 # CHECK-NEXT:      def main(_0: T.Buffer((4, 512), "float32"), _1: T.Buffer((512, 32), "float32"), T_reshape: T.Buffer((4, 32), "float32")):
 # CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          matmul = T.allocate([128], "float32", "global")
-# CHECK-NEXT:          matmul_1 = T.Buffer((128,), data=matmul)
+# CHECK-NEXT:          matmul_ = T.allocate([128], "float32", "global")
+# CHECK-NEXT:          matmul__1 = T.Buffer((128,), data=matmul_)
 # CHECK-NEXT:          for i_outer_init, j_outer_init in T.grid(2, 2):
 # CHECK-NEXT:              cse_var_1: T.int32 = i_outer_init * 64 + j_outer_init * 16
-# CHECK-NEXT:              matmul_1[cse_var_1:cse_var_1 + 16] = T.Broadcast(T.float32(0.0), 16)
-# CHECK-NEXT:              matmul_1[cse_var_1 + 32:cse_var_1 + 32 + 16] = T.Broadcast(T.float32(0.0), 16)
+# CHECK-NEXT:              matmul__1[cse_var_1:cse_var_1 + 16] = T.Broadcast(T.float32(0.0), 16)
+# CHECK-NEXT:              matmul__1[cse_var_1 + 32:cse_var_1 + 32 + 16] = T.Broadcast(T.float32(0.0), 16)
 # CHECK-NEXT:          for k, i_outer, j_outer in T.grid(512, 2, 2):
 # CHECK-NEXT:              cse_var_6: T.int32 = j_outer * 16
 # CHECK-NEXT:              cse_var_5: T.int32 = i_outer * 1024 + k
@@ -102,14 +102,14 @@ print(f"CODE: {res}")
 # CHECK-NEXT:              cse_var_2: T.int32 = cse_var_3 + 32
 # CHECK-NEXT:              _0_1 = T.Buffer((2048,), data=_0.data)
 # CHECK-NEXT:              _1_1 = T.Buffer((16384,), data=_1.data)
-# CHECK-NEXT:              matmul_1[cse_var_3:cse_var_3 + 16] = matmul_1[cse_var_3:cse_var_3 + 16] + T.Broadcast(_0_1[cse_var_5], 16) * _1_1[cse_var_4:cse_var_4 + 16]
-# CHECK-NEXT:              matmul_1[cse_var_2:cse_var_2 + 16] = matmul_1[cse_var_2:cse_var_2 + 16] + T.Broadcast(_0_1[cse_var_5 + 512], 16) * _1_1[cse_var_4:cse_var_4 + 16]
-# CHECK-NEXT:          matmul_2 = T.Buffer((128,), data=matmul)
+# CHECK-NEXT:              matmul__1[cse_var_3:cse_var_3 + 16] = matmul__1[cse_var_3:cse_var_3 + 16] + T.Broadcast(_0_1[cse_var_5], 16) * _1_1[cse_var_4:cse_var_4 + 16]
+# CHECK-NEXT:              matmul__1[cse_var_2:cse_var_2 + 16] = matmul__1[cse_var_2:cse_var_2 + 16] + T.Broadcast(_0_1[cse_var_5 + 512], 16) * _1_1[cse_var_4:cse_var_4 + 16]
+# CHECK-NEXT:          matmul__2 = T.Buffer((128,), data=matmul_)
 # CHECK-NEXT:          for i in range(128):
-# CHECK-NEXT:              matmul_3 = T.Buffer((128,), data=matmul)
-# CHECK-NEXT:              matmul_2[i] = T.max(T.float32(0.0), matmul_3[i])
+# CHECK-NEXT:              matmul__3 = T.Buffer((128,), data=matmul_)
+# CHECK-NEXT:              matmul__2[i] = T.max(T.float32(0.0), matmul__3[i])
 # CHECK-NEXT:          for ax0, ax1 in T.grid(4, 32):
 # CHECK-NEXT:              cse_var_7: T.int32 = ax0 * 32 + ax1
 # CHECK-NEXT:              T_reshape_1 = T.Buffer((128,), data=T_reshape.data)
-# CHECK-NEXT:              T_reshape_1[cse_var_7] = matmul_2[cse_var_7]
+# CHECK-NEXT:              T_reshape_1[cse_var_7] = matmul__2[cse_var_7]
 # CHECK-NEXT:  CODE: 0

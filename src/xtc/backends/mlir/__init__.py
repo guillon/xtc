@@ -14,3 +14,5 @@ from .MlirScheduler import (
     MlirScheduler,  # type: ignore
     MlirSchedule,  # type: ignore
 )
+
+from .MlirGraphBackend import MlirGraphBackend as Backend  # type: ignore

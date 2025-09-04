@@ -15,6 +15,7 @@ Though most strategies are supported for all backends for matmult.
 
 """
 
+from abc import abstractmethod
 import sys
 import os
 import argparse
@@ -33,7 +34,10 @@ from pathlib import Path
 from collections.abc import Sequence, Mapping
 from typing import Any, TypeAlias, cast
 from typing_extensions import override
+import json
+import platform
 
+from xtc.graphs.xtc.graph import XTCGraph
 from xtc.itf.back import Backend
 from xtc.itf.graph import Graph
 from xtc.itf.comp import Module
@@ -96,6 +100,31 @@ def xtc_conv2d_graph(
     with O.graph(name=name) as gb:
         O.conv2d(a, b, stride=(SH, SW), name="O")
     return gb.graph
+
+
+def xtc_conv2d_nhwc_frsc_graph(
+    n: int,
+    h: int,
+    w: int,
+    f: int,
+    r: int,
+    s: int,
+    c: int,
+    SH: int,
+    SW: int,
+    ftype: str,
+    name: str = "matmul",
+) -> Graph:
+    import xtc.graphs.xtc.op as O
+
+    dtype = DTYPES_MAP[ftype]
+    a = O.tensor((n, h * SH + r - 1, w * SW + s - 1, c), dtype, name="A")
+    b = O.tensor((f, r, s, c), dtype, name="B")
+    with O.graph(name=name) as gb:
+        tp = O.transpose(b, axes=(1, 2, 3, 0), name="TP")
+        O.conv2d(a, tp, stride=(SH, SW), name="O")
+    graph = gb.graph
+    return graph
 
 
 def tvm_impl(graph: Graph) -> tuple[Backend, str]:
@@ -213,12 +242,12 @@ def compile_one(
             )
         )
     if args.save_temps:
-        compile_args.update(
-            dict(
-                save_temps=True,
-                save_temps_dir=f"{args.save_temps_dir}/{ident}",
-            )
-        )
+        tmp_path = Path(args.save_temps_dir) / ident
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        compile_args.update(dict(save_temps=True, save_temps_dir=str(tmp_path)))
+        with open(tmp_path / f"{ident}_graph.txt", "w") as outf:
+            print(graph, file=outf)
+
     assert args.eval == "eval"
     compiler = impl.get_compiler(**compile_args)
     module = compiler.compile(schedule=schedule)
@@ -255,7 +284,7 @@ def load_and_evaluate_sample(
     results, code, error_msg = evaluate()
     if code == 0:
         time = min(results)
-        logger.debug("  Evaluated: %s: %s: time: %.2f msecs", ident, in_x, time * 1000)
+        logger.debug("  Evaluated: %s: %s: time: %.3f msecs", ident, in_x, time * 1000)
     else:
         time = 0
         logger.error("Error evaluating: %s: %s: %d: %s", ident, in_x, code, error_msg)
@@ -265,7 +294,8 @@ def load_and_evaluate_sample(
 
     result = (in_x, code, time, backend)
     if callbacks and "result" in callbacks:
-        callbacks["result"](result)
+        for callback in callbacks["result"]:
+            callback(result)
     return result
 
 
@@ -479,21 +509,16 @@ def evaluate_all_parallel(
 
 def evaluate_generate(strategy: Strategy, graph: Graph, args: NS, callbacks: CallBacks):
     assert args.search in ["exhaustive", "random"]
-    all_in_x = strategy.exhaustive()
     if args.search == "random":
-        # TODO: for now randomize from exhaustive
-        all_in_x = np.array(list(all_in_x))
-        trials = (
-            args.trials
-            if args.trials and len(all_in_x) > args.trials
-            else len(all_in_x)
-        )
-        idxs = np.random.choice(np.arange(len(all_in_x)), size=trials, replace=False)
-        all_in_x = all_in_x[idxs]
-    elif args.trials:
-        all_in_x = np.array(list(itertools.islice(all_in_x, args.trials)))
+        assert args.trials > 0
+        sampled_x = strategy.sample(args.trials, args.seed)
+        all_in_x = np.array(list(sampled_x))
     else:
-        all_in_x = np.array(list(all_in_x))
+        all_in_x = strategy.exhaustive()
+        if args.trials:
+            all_in_x = np.array(list(itertools.islice(all_in_x, args.trials)))
+        else:
+            all_in_x = np.array(list(all_in_x))
     evaluate_all_parallel(strategy, all_in_x, graph, args, callbacks)
 
 
@@ -532,13 +557,63 @@ def peak_time(args: NS) -> float:
     assert flops != 0, f"unable to evaluate machine flops for type {dtype}"
     dims_names = OPERATORS[args.operator]["dims"]
     dims_map = {k: v for k, v in zip(dims_names, args.dims)}
-
     flop = mulall([d for k, d in dims_map.items() if k.lower() == k])
     time = flop / flops / args.threads
     return time
 
 
-class CSVCallback:
+class ResultCallBack:
+    @abstractmethod
+    def __call__(self, result: Sequence) -> None: ...
+
+
+class DBCallback(ResultCallBack):
+    def __init__(
+        self,
+        dbfile: str,
+        target: str,
+        threads: int,
+        strategy: str,
+    ) -> None:
+        self._dbfile = dbfile
+        self._target = target
+        self._threads = threads
+        self._version = ["v0.1"]
+        self._platform = [platform.node(), platform.system(), platform.machine()]
+        self._strategy: list[Any] | None = None
+        self._operator: list[Any] | None = None
+        strategy_signature = [strategy_name(strategy)]  # TODO: move to strategy
+        self._strategy = ["xtc.strategy", *strategy_signature]
+
+    def set_graph(self, graph: XTCGraph):
+        assert len(graph.nodes) == 1, f"Only support recording of single node graph"
+        signature = graph.outputs_nodes[0].operation.signature
+        self._operator = ["xtc.operator", *signature]
+
+    def _write_result(self, result: Sequence) -> None:
+        x, code, time, backend = result
+        if code != 0:
+            time = 0
+        compiler = ["xtc", "v0.2.dev1", self._target, self._threads, backend]
+        log = dict(
+            version=self._version,
+            platform=self._platform,
+            compiler=compiler,
+            operator=self._operator,
+            strategy=self._strategy,
+            schedule=list(x),
+            results=[int(code), [float(time)]],
+        )
+        log_json = json.dumps(log)
+        with open(self._dbfile, "a") as outf:
+            print(log_json, flush=True, file=outf)
+
+    @override
+    def __call__(self, result: Sequence) -> None:
+        self._write_result(result)
+
+
+class CSVCallback(ResultCallBack):
     def __init__(self, fname: str, peak_time: float) -> None:
         self._fname = fname
         self._peak_time = peak_time
@@ -569,6 +644,7 @@ class CSVCallback:
         logger.debug(f"Record row: {row}")
         self._write_row(row)
 
+    @override
     def __call__(self, result: Sequence) -> None:
         self._write_result(result)
 
@@ -586,10 +662,8 @@ def search_some(strategy: Strategy, graph: Graph, args: NS):
         args.quiet,
         args.operator,
     )
-    ptime = peak_time(args)
-    result_callback = CSVCallback(args.output, ptime)
     callbacks = {
-        "result": result_callback,
+        "result": args.result_callbacks,
         "search": search_callback,
     }
     if args.search in ["exhaustive", "random"]:
@@ -617,6 +691,8 @@ def optimize(args: NS):
     op_args = (*dims, dtype)
     graph = OPERATORS[args.operator]["operation"](*op_args, name=args.func_name)
     strategy = get_strategy(graph, args)
+    if args.output_db:
+        args.db_callback.set_graph(graph)  # TODO: fix, not really clean
     if args.test or args.opt_level in [0, 1, 2, 3]:
         schedule = args.test
         if not schedule:
@@ -629,30 +705,29 @@ def optimize(args: NS):
             args.quiet,
             args.operator,
         )
-        ptime = peak_time(args)
-        result_callback = CSVCallback(args.output, ptime)
         callbacks = {
-            "result": result_callback,
+            "result": args.result_callbacks,
             "search": search_callback,
         }
         evaluate_sample(strategy, schedule, graph, args, callbacks=callbacks)
-        for row in result_callback._rows:
+        for row in args.csv_callback._rows:
             in_x, time, peak, backend = row
             tqdm.write(
-                f"Schedule: {backend}: {in_x}: time: {time * 1000:.2f} msecs, peak perf: {peak * 100:.2f}%"
+                f"Schedule: {backend}: {in_x}: time: {time * 1000:.3f} msecs, peak perf: {peak * 100:.2f}%"
             )
     else:
         search_some(strategy, graph, args)
 
 
-def get_strategy(graph: Graph, args: NS) -> Strategy:
-    def strat_name(name: str) -> str:
-        alias = STRATEGIES_ALIASES.get(name)
-        if alias is None:
-            return name
-        return strat_name(alias)
+def strategy_name(name: str) -> str:
+    alias = STRATEGIES_ALIASES.get(name)
+    if alias is None:
+        return name
+    return strategy_name(alias)
 
-    name = strat_name(args.strategy)
+
+def get_strategy(graph: Graph, args: NS) -> Strategy:
+    name = strategy_name(args.strategy)
     options = dict(
         threads=args.threads,
         max_unroll=args.max_unroll,
@@ -709,6 +784,27 @@ OPERATORS = {
         "outputs": [["n", "h", "w", "f"]],
         "reference_impl": None,  # defaults to graph evaluation
         "operation": xtc_conv2d_graph,
+        "backends": {
+            "mlir": {
+                "implementer": mlir_impl,
+            },
+            "tvm": {
+                "implementer": tvm_impl,
+            },
+        },
+        "default_strategy": "tile_oo",
+    },
+    "conv2d_nhwc_frsc": {
+        "dims": ["n", "h", "w", "f", "r", "s", "c", "SH", "SW"],
+        "default_dims": [1, 112, 112, 64, 7, 7, 3, 2, 2],
+        "default_type": "f32",
+        "inputs": [
+            ["n", "h * SH + r - 1", "w * SW + s - 1", "c"],
+            ["f", "r", "s", "c"],
+        ],
+        "outputs": [["n", "h", "w", "f"]],
+        "reference_impl": None,  # defaults to graph evaluation
+        "operation": xtc_conv2d_nhwc_frsc_graph,
         "backends": {
             "mlir": {
                 "implementer": mlir_impl,
@@ -777,6 +873,20 @@ def setup_args(args: NS):
     # otherwise the import of tvm breaks the MLIR python bindings
     args.backends = sorted(args.backends)
 
+    # Setup Callbacks
+    args.peak_time = peak_time(args)
+    args.csv_callback = CSVCallback(args.output, args.peak_time)
+    result_callbacks: list[ResultCallBack] = [args.csv_callback]
+    if args.output_db:
+        args.db_callback = DBCallback(
+            args.output_db,
+            "native",
+            args.threads,
+            args.strategy,
+        )
+        result_callbacks.append(args.db_callback)
+    args.result_callbacks = result_callbacks
+
 
 def launch_child(argv: Sequence[str], args: NS):
     env = {}
@@ -810,7 +920,7 @@ def main():
     default_op = "matmul"
     default_dtype = OPERATORS[default_op]["default_type"]
     default_jobs = max(1, multiprocessing.cpu_count() // 2)
-    default_unroll = 512
+    default_unroll = 256
     choice_strategies = list(Strategies.names()) + list(STRATEGIES_ALIASES.keys())
     parser = argparse.ArgumentParser(
         description="Autotune Matmult",
@@ -882,6 +992,11 @@ def main():
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument(
         "--output", type=str, default="results.csv", help="output csv file for search"
+    )
+    parser.add_argument(
+        "--output-db",
+        type=str,
+        help="output json db, for instance: xtc-operators-db.json",
     )
     parser.add_argument(
         "--eval", type=str, choices=["eval"], default="eval", help="evaluation method"

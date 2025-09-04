@@ -34,3 +34,23 @@ executor = module.get_executor(validate=True)
 res = executor.execute()
 print(f"CODE: {res}")
 # XFAIL: *
+# CHECK:       graph:
+# CHECK-NEXT:    name: matmul
+# CHECK-NEXT:    inputs:
+# CHECK-NEXT:    - %0 : 4x512xfloat32
+# CHECK-NEXT:    - %1 : 512x32xfloat32
+# CHECK-NEXT:    outputs:
+# CHECK-NEXT:    - %2 : 4x32xfloat32
+# CHECK-NEXT:    nodes:
+# CHECK-NEXT:    - %2: matmul(%0, %1) {name = 'C'} : [4x512xfloat32, 512x32xfloat32] -> [4x32xfloat32]
+# CHECK-NEXT:  
+# CHECK-NEXT:  Traceback (most recent call last):
+# CHECK-NEXT:    File "/home/cguillon/work/xdsl-transform/main/tests/filecheck/backends/test_matmul_ndiv_jir.py", line 19, in <module>
+# CHECK-NEXT:      sch.tile("i", {"i1": 3}) # non-divisible tile
+# CHECK-NEXT:      ^^^^^^^^^^^^^^^^^^^^^^^^
+# CHECK-NEXT:    File "/home/cguillon/work/xdsl-transform/main/src/xtc/backends/jir/JIRScheduler.py", line 256, in tile
+# CHECK-NEXT:      self._transformer.tile(dim, tiles)
+# CHECK-NEXT:    File "/home/cguillon/work/xdsl-transform/main/src/xtc/backends/jir/JIRScheduler.py", line 62, in tile
+# CHECK-NEXT:      assert parent_size % size == 0, "this backend does not support non-divisible tiles sizes"
+# CHECK-NEXT:             ^^^^^^^^^^^^^^^^^^^^^^^
+# CHECK-NEXT:  AssertionError: this backend does not support non-divisible tiles sizes

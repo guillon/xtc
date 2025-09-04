@@ -14,3 +14,5 @@ from .JIRScheduler import (
     JIRScheduler,  # type: ignore
     JIRSchedule,  # type: ignore
 )
+
+from .JIRBackend import JIRBackend as Backend  # type: ignore
