@@ -40,6 +40,7 @@ class TVMScheduler(itf.schd.Scheduler):
         self.unrolling: dict[str, int] = {}
         self.write_caches: list[str] = []
         self.read_buffers: list[tuple[str, int, bool]] = []
+        self.fused: list[tuple[str, int]] = []
         self._update_loops()
 
     @property
@@ -118,6 +119,13 @@ class TVMScheduler(itf.schd.Scheduler):
         self.read_buffers.append((axis, input_idx, pad))
 
     @override
+    def fuse_producer_at(
+        self, axis: str, input_idx: int, root: str = DEFAULT_ROOT
+    ) -> None:
+        assert input_idx >= 0 and input_idx < len(self._op.np_inputs_spec())
+        self.fused.append((axis, input_idx))
+
+    @override
     def vectorize(self, axes: list[str], root: str = DEFAULT_ROOT) -> None:
         for axis in axes:
             assert axis in self._working_parallel_dims, f"non parallel axis {axis}"
@@ -155,6 +163,12 @@ class TVMScheduler(itf.schd.Scheduler):
             factor, offset = factor_offset(input_idx, pad)
             packs[axis] = (input_idx, factor, offset)
         return packs
+
+    def _full_fused(self) -> dict[str, tuple[int]]:
+        fuses = {}
+        for axis, input_idx in self.fused:
+            fuses[axis] = (input_idx,)
+        return fuses
 
     def _full_order(self) -> list[str]:
         tiles_sizes = self._working_dims
@@ -273,6 +287,7 @@ class TVMScheduler(itf.schd.Scheduler):
     ):
         tilings = self._full_write_buffers()
         packings = self._full_packs()
+        fuses = self._full_fused()
         if packings:
             print(f"INPS = list({obj}.values())[:-1]", file=outf)
         for (tens, parent, axis), tiles in tilings.items():
@@ -286,6 +301,11 @@ class TVMScheduler(itf.schd.Scheduler):
                     print(
                         f'I_R{inp_idx} = {sch}.cache_read(INPS[{inp_idx}], "local", [{tens}])',
                         file=outf,
+                    )
+                if tile_axis in fuses:
+                    (inp_idx,) = fuses[tile_axis]
+                    print(
+                        f"I_F{inp_idx} = {tens}.op.input_tensors[{inp_idx}]", file=outf
                     )
         for idx, ((tens, parent, axis), tiles) in enumerate(tilings.items()):
             if parent:
@@ -304,6 +324,12 @@ class TVMScheduler(itf.schd.Scheduler):
                             f"{sch}[I_R{inp_idx}].storage_align(I_R{inp_idx}.op.axis[-2], factor={factor}, offset={offset})",
                             file=outf,
                         )
+                if tile_axis in fuses:
+                    (inp_idx,) = fuses[tile_axis]
+                    print(
+                        f"{sch}[I_F{inp_idx}].compute_at({sch}[{tens}], {tile_axis})",
+                        file=outf,
+                    )
             for axis, unroll in self.unrolling.items():
                 for u_axis in [f"__u_{axis}", axis]:
                     if u_axis in tiles:
