@@ -48,22 +48,22 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
 # CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(_0: T.Buffer((1, 8, 8, 3), "float32"), _1: T.Buffer((5, 5, 3, 16), "float32"), conv: T.Buffer((1, 4, 4, 16), "float32")):
+# CHECK-NEXT:      def main(_0: T.Buffer((1, 8, 8, 3), "float32"), _1: T.Buffer((5, 5, 3, 16), "float32"), conv_: T.Buffer((1, 4, 4, 16), "float32")):
 # CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          pad = T.allocate([363], "float32", "global")
-# CHECK-NEXT:          pad_1 = T.Buffer((363,), data=pad)
+# CHECK-NEXT:          pad_ = T.allocate([363], "float32", "global")
+# CHECK-NEXT:          pad__1 = T.Buffer((363,), data=pad_)
 # CHECK-NEXT:          for hi, wi, ci in T.grid(11, 11, 3):
 # CHECK-NEXT:              cse_var_1: T.int32 = wi * 3
 # CHECK-NEXT:              _0_1 = T.Buffer((192,), data=_0.data)
-# CHECK-NEXT:              pad_1[hi * 33 + cse_var_1 + ci] = T.if_then_else(2 <= hi and hi < 10 and 2 <= wi and wi < 10, _0_1[hi * 24 + cse_var_1 + ci - 54], T.float32(0.0))
+# CHECK-NEXT:              pad__1[hi * 33 + cse_var_1 + ci] = T.if_then_else(2 <= hi and hi < 10 and 2 <= wi and wi < 10, _0_1[hi * 24 + cse_var_1 + ci - 54], T.float32(0.0))
 # CHECK-NEXT:          for h, w, f in T.grid(4, 4, 16):
-# CHECK-NEXT:              conv_1 = T.Buffer((256,), data=conv.data)
-# CHECK-NEXT:              conv_1[h * 64 + w * 16 + f] = T.float32(0.0)
+# CHECK-NEXT:              conv__1 = T.Buffer((256,), data=conv_.data)
+# CHECK-NEXT:              conv__1[h * 64 + w * 16 + f] = T.float32(0.0)
 # CHECK-NEXT:              for r, s, c in T.grid(5, 5, 3):
 # CHECK-NEXT:                  cse_var_2: T.int32 = h * 64 + w * 16 + f
 # CHECK-NEXT:                  _1_1 = T.Buffer((1200,), data=_1.data)
-# CHECK-NEXT:                  conv_1[cse_var_2] = conv_1[cse_var_2] + pad_1[h * 66 + r * 33 + w * 6 + s * 3 + c] * _1_1[r * 240 + s * 48 + c * 16 + f]
-# CHECK-NEXT:  O = obj['conv']
+# CHECK-NEXT:                  conv__1[cse_var_2] = conv__1[cse_var_2] + pad__1[h * 66 + r * 33 + w * 6 + s * 3 + c] * _1_1[r * 240 + s * 48 + c * 16 + f]
+# CHECK-NEXT:  O = obj['conv_']
 # CHECK-NEXT:  b, h, w, f, = O.op.axis
 # CHECK-NEXT:  r, s, c, = O.op.reduce_axis
 # CHECK-NEXT:  sch[O].reorder(b, h, w, f, r, s, c)
@@ -74,19 +74,19 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
 # CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(_0: T.Buffer((1, 8, 8, 3), "float32"), _1: T.Buffer((5, 5, 3, 16), "float32"), conv: T.Buffer((1, 4, 4, 16), "float32")):
+# CHECK-NEXT:      def main(_0: T.Buffer((1, 8, 8, 3), "float32"), _1: T.Buffer((5, 5, 3, 16), "float32"), conv_: T.Buffer((1, 4, 4, 16), "float32")):
 # CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          pad = T.allocate([363], "float32", "global")
-# CHECK-NEXT:          pad_1 = T.Buffer((363,), data=pad)
+# CHECK-NEXT:          pad_ = T.allocate([363], "float32", "global")
+# CHECK-NEXT:          pad__1 = T.Buffer((363,), data=pad_)
 # CHECK-NEXT:          for hi, wi, ci in T.grid(11, 11, 3):
 # CHECK-NEXT:              cse_var_1: T.int32 = wi * 3
 # CHECK-NEXT:              _0_1 = T.Buffer((192,), data=_0.data)
-# CHECK-NEXT:              pad_1[hi * 33 + cse_var_1 + ci] = T.if_then_else(2 <= hi and hi < 10 and 2 <= wi and wi < 10, _0_1[hi * 24 + cse_var_1 + ci - 54], T.float32(0.0))
+# CHECK-NEXT:              pad__1[hi * 33 + cse_var_1 + ci] = T.if_then_else(2 <= hi and hi < 10 and 2 <= wi and wi < 10, _0_1[hi * 24 + cse_var_1 + ci - 54], T.float32(0.0))
 # CHECK-NEXT:          for h, w, f in T.grid(4, 4, 16):
-# CHECK-NEXT:              conv_1 = T.Buffer((256,), data=conv.data)
-# CHECK-NEXT:              conv_1[h * 64 + w * 16 + f] = T.float32(0.0)
+# CHECK-NEXT:              conv__1 = T.Buffer((256,), data=conv_.data)
+# CHECK-NEXT:              conv__1[h * 64 + w * 16 + f] = T.float32(0.0)
 # CHECK-NEXT:              for r, s, c in T.grid(5, 5, 3):
 # CHECK-NEXT:                  cse_var_2: T.int32 = h * 64 + w * 16 + f
 # CHECK-NEXT:                  _1_1 = T.Buffer((1200,), data=_1.data)
-# CHECK-NEXT:                  conv_1[cse_var_2] = conv_1[cse_var_2] + pad_1[h * 66 + r * 33 + w * 6 + s * 3 + c] * _1_1[r * 240 + s * 48 + c * 16 + f]
+# CHECK-NEXT:                  conv__1[cse_var_2] = conv__1[cse_var_2] + pad__1[h * 66 + r * 33 + w * 6 + s * 3 + c] * _1_1[r * 240 + s * 48 + c * 16 + f]
 # CHECK-NEXT:  CODE: 0

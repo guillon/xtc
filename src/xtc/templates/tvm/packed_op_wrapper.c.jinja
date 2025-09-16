@@ -31,21 +31,29 @@ typedef struct {
 } DLTensor;
 
 /* Bridge bare pointers to TVM packed function with DLTensor objects */
-extern void {{packed_func_name}}(void *args, int32_t *args_types, int32_t num_args, void *res, int32_t *res_types, void *resource_manager);
+#ifdef __cplusplus
+extern "C"
+#else
+extern
+#endif
+void {{packed_func_name}}(void *args[], const int32_t *args_types, int32_t num_args, void *res, const int32_t *res_types, void *resource_manager);
 
+#ifdef __cplusplus
+extern "C"
+#endif
 void {{func_name}}({% for idx in range(inputs|length) %}{% if idx > 0 %}, {% endif %}const float *input{{idx}}{% endfor %}{% for idx in range(outputs|length) %}, float *output{{idx}}{% endfor %}) {
-    DLDataType dtype = { kDLFloat, 32, 1 };
-    DLDevice dev = { kDLCPU, 0 };
+    static const DLDataType dtype = { kDLFloat, 32, 1 };
+    static const DLDevice dev = { kDLCPU, 0 };
 {% for idx in range(inputs|length) %}
-    int64_t DL_input{{idx}}_shape[] = { {% for dim in inputs[idx].shape %}{{dim}}, {% endfor %} };
-    DLTensor DL_input{{idx}} = { (void *)input{{idx}}, dev, {{inputs[idx].shape|length}}, dtype, DL_input{{idx}}_shape, NULL, 0 };
+    static const int64_t DL_input{{idx}}_shape[{{inputs[idx].shape|length}}] = { {% for dim in inputs[idx].shape %}{{dim}}, {% endfor %} };
+    DLTensor DL_input{{idx}} = { (void *)input{{idx}}, dev, {{inputs[idx].shape|length}}, dtype, (int64_t *)DL_input{{idx}}_shape, NULL, 0 };
 {% endfor %}
 {% for idx in range(outputs|length) %}
-    int64_t DL_output{{idx}}_shape[] = { {% for dim in outputs[idx].shape %}{{dim}}, {% endfor %} };
-    DLTensor DL_output{{idx}} = { (void *)output{{idx}}, dev, {{outputs[idx].shape|length}}, dtype, DL_output{{idx}}_shape, NULL, 0 };
+    static const int64_t DL_output{{idx}}_shape[{{outputs[idx].shape|length}}] = { {% for dim in outputs[idx].shape %}{{dim}}, {% endfor %} };
+    DLTensor DL_output{{idx}} = { (void *)output{{idx}}, dev, {{outputs[idx].shape|length}}, dtype, (int64_t *)DL_output{{idx}}_shape, NULL, 0 };
 {% endfor %}
-    void *args[] = { {% for idx in range(inputs|length) %}&DL_input{{idx}}, {% endfor %}{% for idx in range(outputs|length) %}&DL_output{{idx}}, {% endfor %} };
-    int32_t types[] = { {% for idx in range(inputs|length) %}kTVMDLTensorHandle, {% endfor %}{% for idx in range(outputs|length) %}kTVMDLTensorHandle, {% endfor %} };
+    void *args[{{inputs|length}} + {{outputs|length}}] = { {% for idx in range(inputs|length) %}&DL_input{{idx}}, {% endfor %}{% for idx in range(outputs|length) %}&DL_output{{idx}}, {% endfor %} };
+    const int32_t types[{{inputs|length}} + {{outputs|length}}] = { {% for idx in range(inputs|length) %}kTVMDLTensorHandle, {% endfor %}{% for idx in range(outputs|length) %}kTVMDLTensorHandle, {% endfor %} };
     int64_t res;
     int32_t res_type = kTVMArgInt;
     {{packed_func_name}}(args, types, {{inputs|length}} + {{outputs|length}}, &res, &res_type, NULL);

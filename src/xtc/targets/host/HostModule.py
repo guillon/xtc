@@ -12,6 +12,7 @@ from xtc.graphs.xtc.data import XTCTensor
 from xtc.graphs.xtc.expr import XTCTensorExpr
 
 from .HostEvaluator import HostExecutor, HostEvaluator
+from .HostCEvaluator import HostCExecutor, HostCEvaluator
 
 
 __all__ = [
@@ -27,14 +28,34 @@ class HostModule(itf.comp.Module):
         file_name: str,
         file_type: str,
         graph: Graph | None = None,
+        headers: list[str] = [],
+        headers_path: list[str] = [],
+        shlibs: list[str] = [],
+        arlibs: list[str] = [],
+        csrcs: list[str] = [],
         **kwargs: Any,
     ) -> None:
         self._name = name
         self._payload_name = payload_name
         self._file_name = file_name
         self._file_type = file_type
-        assert self._file_type == "shlib", "only support shlib for JIR Module"
-        assert self._file_name.endswith(".so"), "file name is not a shlib"
+        assert self._file_type in ["shlib", "csrc", "arlib"], (
+            "only support shlib/csrc/arlib Module"
+        )
+        assert self._file_type != "shlib" or self._file_name.endswith(".so"), (
+            "file name is not a shlib"
+        )
+        assert self._file_type != "csrc" or self._file_name.endswith(".c"), (
+            "file name is not c file"
+        )
+        assert self._file_type != "arlib" or self._file_name.endswith(".a"), (
+            "file name is not an archive"
+        )
+        self._shlibs = shlibs
+        self._arlibs = arlibs
+        self._headers = headers
+        self._headers_path = headers_path
+        self._csrcs = csrcs
         self._bare_ptr = kwargs.get("bare_ptr", True)
         self._graph = graph
         if self._graph is not None:
@@ -113,14 +134,44 @@ class HostModule(itf.comp.Module):
 
     @override
     def get_evaluator(self, **kwargs: Any) -> itf.exec.Evaluator:
-        return HostEvaluator(
+        assert self.file_type in ["shlib", "csrc"]
+        cls = {
+            "shlib": HostEvaluator,
+            "csrc": HostCEvaluator,
+        }[self.file_type]
+        return cls(
             self,
             **kwargs,
         )
 
     @override
     def get_executor(self, **kwargs: Any) -> itf.exec.Executor:
-        return HostExecutor(
+        assert self.file_type in ["shlib", "csrc"]
+        cls = {
+            "shlib": HostExecutor,
+            "csrc": HostCExecutor,
+        }[self.file_type]
+        return cls(
             self,
             **kwargs,
         )
+
+    @property
+    def shlibs(self) -> list[str]:
+        return self._shlibs
+
+    @property
+    def arlibs(self) -> list[str]:
+        return self._arlibs
+
+    @property
+    def csrcs(self) -> list[str]:
+        return self._csrcs
+
+    @property
+    def headers(self) -> list[str]:
+        return self._headers
+
+    @property
+    def headers_path(self) -> list[str]:
+        return self._headers_path

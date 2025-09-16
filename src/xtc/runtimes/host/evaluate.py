@@ -9,6 +9,7 @@ from pathlib import Path
 
 from xtc.utils.loader import LibLoader
 from xtc.runtimes.types.ndarray import NDArray
+from xtc.utils.text import to_cname
 
 from .evaluator import Executor, Evaluator
 
@@ -30,8 +31,13 @@ def load_and_evaluate(
     min_repeat_ms = kwargs.get("min_repeat_ms", 0)
     pmu_counters = kwargs.get("pmu_counters", [])
     with LibLoader(dll) as lib:
-        func = getattr(lib, sym)
-        assert func is not None, f"Cannot find symbol {sym} in lib {dll}"
+        try:
+            func = getattr(lib, to_cname(sym))
+        except AttributeError:
+            try:
+                func = getattr(lib, sym)
+            except AttributeError as e:
+                raise RuntimeError(f"Cannot find symbol in lib: {e}") from None
         func.packed = not bare_ptr
         if validate:
             exec_func = Executor(func)

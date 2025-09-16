@@ -14,7 +14,7 @@ utils.print_all_opt_schedules(backend, strategy)
 utils.print_exhaustive_samples(backend, strategy, 200)
 
 # CHECK:       schedule O0: [1, 1, 1, 1, 1, 1, 1, 0]
-# CHECK-NEXT:  O = obj['%2']
+# CHECK-NEXT:  O = obj['_2']
 # CHECK-NEXT:  i, j, = O.op.axis
 # CHECK-NEXT:  k, = O.op.reduce_axis
 # CHECK-NEXT:  i, i1 = sch[O].split(i, factor=1)
@@ -32,7 +32,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sch[O].parallel(i)
 # CHECK-NEXT:  
 # CHECK-NEXT:  schedule O1: [1, 1, 1, 1, 1, 1, 1, 0]
-# CHECK-NEXT:  O = obj['%2']
+# CHECK-NEXT:  O = obj['_2']
 # CHECK-NEXT:  i, j, = O.op.axis
 # CHECK-NEXT:  k, = O.op.reduce_axis
 # CHECK-NEXT:  i, i1 = sch[O].split(i, factor=1)
@@ -50,8 +50,8 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sch[O].parallel(i)
 # CHECK-NEXT:  
 # CHECK-NEXT:  schedule O2: [1, 1, 1, 1, 1, 16, 1, 1]
-# CHECK-NEXT:  O = obj['%2']
-# CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
+# CHECK-NEXT:  O = obj['_2']
+# CHECK-NEXT:  O_W0 = sch.cache_write(O, "global")
 # CHECK-NEXT:  i, j, = O.op.axis
 # CHECK-NEXT:  k, = O.op.reduce_axis
 # CHECK-NEXT:  i, i1 = sch[O].split(i, factor=1)
@@ -75,8 +75,8 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sch[O_W0].vectorize(j3)
 # CHECK-NEXT:  
 # CHECK-NEXT:  schedule O3: [1, 1, 3, 1, 1, 16, 12, 1]
-# CHECK-NEXT:  O = obj['%2']
-# CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
+# CHECK-NEXT:  O = obj['_2']
+# CHECK-NEXT:  O_W0 = sch.cache_write(O, "global")
 # CHECK-NEXT:  i, j, = O.op.axis
 # CHECK-NEXT:  k, = O.op.reduce_axis
 # CHECK-NEXT:  i, i1 = sch[O].split(i, factor=3)
@@ -300,8 +300,8 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sample 198: [3, 1, 1, 1, 1, 16, 4, 0]
 # CHECK-NEXT:  sample 199: [3, 1, 1, 1, 1, 16, 4, 1]
 # CHECK-NEXT:  stats {'filtered_vec': 200, 'filtered': 2944, 'all': 6104}
-# CHECK-NEXT:  O = obj['%2']
-# CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
+# CHECK-NEXT:  O = obj['_2']
+# CHECK-NEXT:  O_W0 = sch.cache_write(O, "global")
 # CHECK-NEXT:  i, j, = O.op.axis
 # CHECK-NEXT:  k, = O.op.reduce_axis
 # CHECK-NEXT:  i, i1 = sch[O].split(i, factor=3)

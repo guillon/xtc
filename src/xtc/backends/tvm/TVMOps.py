@@ -6,12 +6,12 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing_extensions import override
 from typing import Any, Type, TypeAlias
-import tarfile
-import shutil
 
 from xtc.utils.math import mulall
+from xtc.utils.text import to_cname
 
 from xtc.itf.graph import Operation, Graph, Node
+from xtc.utils.text import to_cname
 
 __all__ = [
     "TVMBaseExpr",
@@ -22,106 +22,18 @@ __all__ = [
 ]
 
 import tvm
-import tvm.te as te
-import tvm.topi as topi
+from tvm import te, topi
 
 TETensor: TypeAlias = Any  # Use instead of te.Tensor to avoids type errors
 TEIndexVar: TypeAlias = Any
 
 
-def get_tvm_native_target_options() -> str:
-    """
-    Returm the tvm target options to pass to llvm.
-    """
-    from cpuinfo import get_cpu_info
-
-    info = get_cpu_info()
-    arch = info["arch_string_raw"]
-    flags = info["flags"]
-    cpu, attrs, triple = "", "", ""
-    if arch == "x86_64":
-        triple = "x86_64-linux-gnu"
-        if "avx512f" in flags:
-            cpu = "skylake-avx512"
-        elif "avx2" in flags:
-            cpu = "core-avx2"
-    elif arch == "aarch64":
-        triple = "aarch64-linux-gnu"
-        if "asimd" in flags:
-            cpu = "cortex-a72"
-            attrs = "+neon"
-    target_options = []
-    if triple:
-        target_options.append(f"-mtriple={triple}")
-    if cpu:
-        target_options.append(f"-mcpu={cpu}")
-    if attrs:
-        target_options.append(f"-mattrs={attrs}")
-    return " ".join(target_options)
-
-
-def tvm_build_crt_args(target: str) -> dict[str, Any]:
-    # We use system-lib with crt runtime such that DSO loading works
-    # The generated .so can then be used:
-    # - for static compilation as soon as the tvm runtime is provided
-    # - for dynamic loading from python
-    # Recent version of tvm (i.e. 0.19) have a Runtime object
-    # Older version (i.e. 0.16) support passing runtime options in target
-    try:
-        from tvm.relay.backend import Runtime
-
-        runtime_kwargs = {
-            "runtime": Runtime("crt", {"system-lib": True}),
-        }
-    except:
-        runtime_kwargs = {}
-        target = f"{target} --system-lib --runtime=c"
-    return {
-        "target": target,
-        **runtime_kwargs,
-    }
-
-
-def tvm_build_crt(
-    sch: Any, operation: Any, target: str, name: str | None = None
-) -> Any:
-    build_kwargs = tvm_build_crt_args(target)
-    return tvm.build(sch, operation, name=name, **build_kwargs)
-
-
-def tvm_emit_c(
-    sch: te.Schedule, tensors: Sequence[TETensor], target: str, dir: str, name: str
-) -> Any:
-    target = "c -keys=arch -march=generic -mcpu=generic"
-    build_kwargs = tvm_build_crt_args(target)
-    config = {
-        "tir.disable_vectorize": True,
-    }
-    with tvm.transform.PassContext(opt_level=3, config=config):
-        built = tvm.build(
-            sch,
-            list(tensors),
-            name=name,
-            **build_kwargs,
-        )
-    tar_file = f"{dir}.tar"
-    built.export_library(tar_file)
-    shutil.rmtree(dir, ignore_errors=True)
-    with tarfile.open(tar_file) as tf:
-        tf.extractall(dir)
-
-
 class TVMBaseExpr(ABC):
-    def __init__(self, name: str, target: str | None = None) -> None:
+    def __init__(
+        self,
+        name: str,
+    ) -> None:
         self.name = name
-        if target is not None:
-            self.target_options = ""
-            self.target = target
-        else:
-            self.target_options = get_tvm_native_target_options()
-            self.target = "llvm"
-        self.tgt = tvm.target.Target(target=f"{self.target} {self.target_options}")
-        self.dev = tvm.device(self.tgt.kind.name, 0)
 
     @abstractmethod
     def generate(self) -> tuple[TETensor, ...]: ...
@@ -133,32 +45,6 @@ class TVMBaseExpr(ABC):
     def np_outputs_spec(self) -> list[dict[str, Any]]: ...
     @abstractmethod
     def np_inputs_spec(self) -> list[dict[str, Any]]: ...
-
-    def build(
-        self,
-        tensors: Sequence[TETensor],
-        sch: te.Schedule,
-        func_name: str | None = None,
-    ) -> Any:
-        if func_name is None:
-            func_name = self.name
-        return tvm_build_crt(
-            sch,
-            tensors,
-            name=func_name,
-            target=self.tgt,
-        )
-
-    def emit_c(
-        self,
-        tensors: Sequence[TETensor],
-        sch: te.Schedule,
-        dir: str,
-        func_name: str | None = None,
-    ) -> None:
-        if func_name is None:
-            func_name = self.name
-        tvm_emit_c(sch, tensors, self.tgt, dir, func_name)
 
     def lower(self, tensors: Sequence[TETensor], sch: te.Schedule) -> str:
         return tvm.lower(sch, list(tensors), simple_mode=True)
@@ -191,13 +77,12 @@ class TVMOperation(TVMBaseExpr):
         args: tuple[Any, ...],
         attrs: dict[str, Any] = {},
         name: str | None = None,
-        target: str | None = None,
     ) -> None:
         self.args = args
         self.attrs = attrs
         self.operator = operator(args, attrs, name=name)
         super().__init__(
-            name=self.operator.name if name is None else name, target=target
+            name=self.operator.cname if name is None else name,
         )
 
     @override
@@ -246,8 +131,11 @@ class TVMOperation(TVMBaseExpr):
 
 
 class TVMGraph(TVMBaseExpr):
-    def __init__(self, graph: Graph, target: str | None = None):
-        super().__init__(name=graph.name, target=target)
+    def __init__(
+        self,
+        graph: Graph,
+    ):
+        super().__init__(name=graph.name)
         self._graph = graph
         self._operations = {
             node.name: TVMOperation.from_operation(node.operation, node.name)
@@ -268,7 +156,7 @@ class TVMGraph(TVMBaseExpr):
         shape, dtype = self._te_shape_dtype_from_node(node)
         return te.placeholder(
             shape,
-            name=node.name,
+            name=to_cname(node.name),
             dtype=dtype,
         )
 
@@ -280,14 +168,18 @@ class TVMGraph(TVMBaseExpr):
         variables: dict[str, Any],
     ) -> tuple[TETensor, ...]:
         assert len(outputs) == 1
-        in_outs = operation.operator.generate_op([variables[name] for name in inputs])
-        variables[outputs[0]] = in_outs[-1]
+        in_outs = operation.operator.generate_op(
+            [variables[to_cname(name)] for name in inputs]
+        )
+        variables[to_cname(outputs[0])] = in_outs[-1]
         return in_outs
 
     def _te_expr_from_graph(self) -> tuple[dict[str, TETensor], dict[str, TETensor]]:
         inputs = {
-            node.name: self._te_tensor_from_node(node)
-            for node in self._graph.inputs_nodes
+            te.name: te
+            for te in [
+                self._te_tensor_from_node(node) for node in self._graph.inputs_nodes
+            ]
         }
         variables = {**inputs}
         for node, operation in zip(
@@ -296,7 +188,9 @@ class TVMGraph(TVMBaseExpr):
             self._te_op_from_op(node.inputs, node.outputs, operation, variables)
         params = {
             name: variables[name]
-            for name in [*self._graph.inputs, *self._graph.outputs]
+            for name in [
+                to_cname(name) for name in [*self._graph.inputs, *self._graph.outputs]
+            ]
         }
         return variables, params
 
@@ -358,7 +252,7 @@ class TVMOperator(ABC):
     ) -> None:
         self.args = args
         self.attrs = {**attrs}
-        self.name = name if name is not None else self.DEFAULT_NAME
+        self.cname = to_cname(name if name is not None else self.DEFAULT_NAME)
 
     @abstractmethod
     def generate_op(
@@ -407,6 +301,14 @@ class TVMOperatorMatmul(TVMOperator):
             B = te.placeholder((Kk, Kj), name="B", dtype=dtype)
         else:
             A, B = inputs
+        Ashape = tuple(A.shape)
+        Bshape = tuple(B.shape)
+        Anewshape = (Ashape[0], mulall(list(Ashape[1:])))
+        Bnewshape = (mulall(list(Bshape[:-1])), Bshape[-1])
+        if Ashape != Anewshape:
+            A = topi.reshape(A, newshape=Anewshape)
+        if Bshape != Bnewshape:
+            B = topi.reshape(B, newshape=Bnewshape)
         k = te.reduce_axis((0, Kk), "k")
         O = te.compute(
             (Ki, Kj),
@@ -416,7 +318,7 @@ class TVMOperatorMatmul(TVMOperator):
                     axis=k,
                 )
             ),
-            name=self.name,
+            name=self.cname,
         )
         return A, B, O
 
@@ -479,7 +381,7 @@ class TVMOperatorRelu(TVMOperator):
         O = te.compute(
             (Ki,),
             lambda i,: tvm.tir.max(self.attrs["threshold"], A[i]),
-            name=self.name,
+            name=self.cname,
         )
         if shape != newshape:
             O = topi.reshape(O, newshape=shape)
@@ -552,7 +454,7 @@ class TVMOperatorConv2D(TVMOperator):
                     axis=(r, s, c),
                 )
             ),
-            name=self.name,
+            name=self.cname,
         )
         return A, W, O
 
@@ -622,7 +524,7 @@ class TVMOperatorPad2D(TVMOperator):
                     0,
                 )
             ),
-            name=self.name,
+            name=self.cname,
         )
         return A, O
 
@@ -696,7 +598,7 @@ class TVMOperatorTranspose(TVMOperator):
             indices = [out_indices[in_axes[axis]] for axis in range(len(shape))]
             return A(*indices)
 
-        O = te.compute((i,), transpose_i, name=self.name)
+        O = te.compute((i,), transpose_i, name=self.cname)
         if out_shape != (i,):
             O = topi.reshape(O, newshape=out_shape)
         return A, O

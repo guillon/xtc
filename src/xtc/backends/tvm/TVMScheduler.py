@@ -11,6 +11,7 @@ import numpy as np
 from xtc.itf.schd.scheduler import DEFAULT_ROOT
 import xtc.backends.tvm as backend
 import xtc.itf as itf
+from xtc.utils.text import to_cname
 
 # Actual backend Schedule implementation is a mapping
 # from op name to the TVM schedule string
@@ -277,9 +278,9 @@ class TVMScheduler(itf.schd.Scheduler):
             print(f"INPS = list({obj}.values())[:-1]", file=outf)
         for (tens, parent, axis), tiles in tilings.items():
             if not parent:
-                print(f"{tens} = {obj}['{self._op.name}']", file=outf)
+                print(f"{tens} = {obj}['{to_cname(self._op.name)}']", file=outf)
             else:
-                print(f'{tens} = {sch}.cache_write({parent}, "local")', file=outf)
+                print(f'{tens} = {sch}.cache_write({parent}, "global")', file=outf)
             for tile_axis in tiles:
                 if tile_axis in packings:
                     inp_idx, _, _ = packings[tile_axis]

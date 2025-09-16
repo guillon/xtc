@@ -67,7 +67,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:                  C_1[cse_var_1] = C_1[cse_var_1] + _0_1[cse_var_2 + k] * _1_1[k * 64 + j]
 # CHECK-NEXT:  INPS = list(obj.values())[:-1]
 # CHECK-NEXT:  O = obj['C']
-# CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
+# CHECK-NEXT:  O_W0 = sch.cache_write(O, "global")
 # CHECK-NEXT:  I_R1 = sch.cache_read(INPS[1], "local", [O_W0])
 # CHECK-NEXT:  i, j, = O.op.axis
 # CHECK-NEXT:  k, = O.op.reduce_axis
@@ -95,12 +95,12 @@ print(f"CODE: {res}")
 # CHECK-NEXT:      @T.prim_func
 # CHECK-NEXT:      def main(_0: T.Buffer((64, 64), "float32"), _1: T.Buffer((64, 64), "float32"), C: T.Buffer((64, 64), "float32")):
 # CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          C_local = T.allocate([2048], "float32", "local")
+# CHECK-NEXT:          C_global = T.allocate([2048], "float32", "global")
 # CHECK-NEXT:          _1_local = T.allocate([16640], "float32", "local")
 # CHECK-NEXT:          for j_outer in range(2):
-# CHECK-NEXT:              C_local_1 = T.Buffer((2048,), data=C_local, scope="local")
+# CHECK-NEXT:              C_global_1 = T.Buffer((2048,), data=C_global)
 # CHECK-NEXT:              for i_c_outer_init, j_c_outer_init, i_c_inner_outer_init, i_c_inner_inner_init in T.grid(8, 2, 2, 4):
-# CHECK-NEXT:                  C_local_1[i_c_outer_init * 256 + i_c_inner_outer_init * 128 + i_c_inner_inner_init * 32 + j_c_outer_init * 16:i_c_outer_init * 256 + i_c_inner_outer_init * 128 + i_c_inner_inner_init * 32 + j_c_outer_init * 16 + 16] = T.Broadcast(T.float32(0.0), 16)
+# CHECK-NEXT:                  C_global_1[i_c_outer_init * 256 + i_c_inner_outer_init * 128 + i_c_inner_inner_init * 32 + j_c_outer_init * 16:i_c_outer_init * 256 + i_c_inner_outer_init * 128 + i_c_inner_inner_init * 32 + j_c_outer_init * 16 + 16] = T.Broadcast(T.float32(0.0), 16)
 # CHECK-NEXT:              for k_outer in range(4):
 # CHECK-NEXT:                  _1_local_1 = T.Buffer((16640,), data=_1_local, scope="local")
 # CHECK-NEXT:                  for ax0, ax1 in T.grid(16, 32):
@@ -110,8 +110,8 @@ print(f"CODE: {res}")
 # CHECK-NEXT:                      cse_var_2: T.int32 = j_c_outer * 16
 # CHECK-NEXT:                      cse_var_1: T.int32 = i_c_outer * 256 + i_c_inner_outer * 128 + i_c_inner_inner * 32 + cse_var_2
 # CHECK-NEXT:                      _0_1 = T.Buffer((4096,), data=_0.data)
-# CHECK-NEXT:                      C_local_1[cse_var_1:cse_var_1 + 16] = C_local_1[cse_var_1:cse_var_1 + 16] + T.Broadcast(_0_1[i_c_outer * 512 + i_c_inner_outer * 256 + i_c_inner_inner * 64 + k_outer * 16 + k_inner], 16) * _1_local_1[k_inner * 1040 + cse_var_2:k_inner * 1040 + cse_var_2 + 16]
+# CHECK-NEXT:                      C_global_1[cse_var_1:cse_var_1 + 16] = C_global_1[cse_var_1:cse_var_1 + 16] + T.Broadcast(_0_1[i_c_outer * 512 + i_c_inner_outer * 256 + i_c_inner_inner * 64 + k_outer * 16 + k_inner], 16) * _1_local_1[k_inner * 1040 + cse_var_2:k_inner * 1040 + cse_var_2 + 16]
 # CHECK-NEXT:              for j_inner, i in T.grid(32, 64):
 # CHECK-NEXT:                  C_1 = T.Buffer((4096,), data=C.data)
-# CHECK-NEXT:                  C_1[i * 64 + j_outer * 32 + j_inner] = C_local_1[i * 32 + j_inner]
+# CHECK-NEXT:                  C_1[i * 64 + j_outer * 32 + j_inner] = C_global_1[i * 32 + j_inner]
 # CHECK-NEXT:  CODE: 0

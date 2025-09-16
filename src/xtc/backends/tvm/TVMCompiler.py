@@ -4,17 +4,26 @@
 #
 from typing import Any, cast
 from typing_extensions import override
+from collections.abc import Sequence
 import tempfile
 from pathlib import Path
+import tarfile
+import shutil
 import subprocess
 import shlex
+import sys
+from functools import partial
 
 from xtc.targets.host import HostModule
 
 import xtc.backends.tvm as backend
 import xtc.itf as itf
+from xtc.utils.text import to_cname, jinja_generate_file
 
-from .TVMOps import TVMBaseExpr
+from .TVMOps import TVMBaseExpr, TETensor
+
+import tvm
+import tvm.te as te
 
 __all__ = [
     "TVMCompiler",
@@ -47,17 +56,163 @@ class TVMCompiler(itf.comp.Compiler):
         self.print_source_ir = kwargs.get("print_source_ir", False)
         self.print_transformed_ir = kwargs.get("print_transformed_ir", False)
         self.print_assembly = kwargs.get("print_assembly", False)
+        self.print_file = kwargs.get("print_file", sys.stdout)
         self.color = kwargs.get("color", False)
         self.shared_lib = kwargs.get("shared_lib", False)
+        self.ar_lib = kwargs.get("ar_lib", False)
         self.executable = kwargs.get("executable", False)
         self.emit_c = kwargs.get("emit_c", False)
+        self.target = kwargs.get("target", "native")
+        self.arch = kwargs.get("arch", "native")
+        self.tvm_target_options = self._get_tvm_target_options(self.target, self.arch)
+        self.tvm_target = "llvm"
+        self.tvm_tgt = f"{self.tvm_target} {self.tvm_target_options}"
         assert not self.executable, f"executable generation not supported yet for TVM"
-        assert self.shared_lib, f"shared_lib generation is mandatory for TVM"
+        assert self.shared_lib or self.emit_c or self.ar_lib, (
+            f"shared_lib/ar_lib or C generation is mandatory for TVM"
+        )
+        assert not (self.shared_lib and self.ar_lib), (
+            f"cannot have both shlib and arlib"
+        )
 
     @property
     @override
     def backend(self) -> itf.back.Backend:
         return self._backend
+
+    @override
+    def compile(self, schedule: itf.schd.Schedule) -> itf.comp.Module:
+        assert isinstance(schedule, backend.TVMSchedule)
+        assert self.dump_file is not None
+        save_temp = self._save_temp
+        op = self._backend._tvm_base
+        func_name = to_cname(self.payload_name)
+        packed_func_name = f"packed_{func_name}" if self.bare_ptr else func_name
+
+        if self.shared_lib:
+            type = "shlib"
+        elif self.ar_lib:
+            type = "arlib"
+        else:
+            # May emit c in addition to lib
+            assert self.emit_c
+            type = "csrc"
+
+        Path(self.dump_file).parent.mkdir(parents=True, exist_ok=True)
+        dump_base = Path(self.dump_file).stem
+        lib_path = self.dump_file
+        if type in ["arlib", "shlib"]:
+            emit_c_base = f"{lib_path}.export_c"
+        else:
+            emit_c_base = lib_path
+        if self.bare_ptr:
+            packed_lib_path = f"{lib_path}_packed"
+            emit_c_packed_base = f"{emit_c_base}_packed"
+        else:
+            packed_lib_path = lib_path
+            emit_c_packed_base = emit_c_base
+        operation = op.generate()
+        if self.print_source_ir or self.save_temps:
+            sch = op.schedule(operation)
+            lowered = str(op.lower(operation, sch))
+            if self.print_source_ir:
+                self._print(lowered)
+            save_temp(f"{dump_base}.initial.txt", lowered)
+        schedule = cast(backend.TVMSchedule, schedule)
+        save_temp(f"{dump_base}.sched.txt", str(schedule))
+        if self.print_transformed_ir:
+            self._print(schedule)
+        sch = op.schedule(operation, schedule)
+        if self.print_transformed_ir or self.save_temps:
+            lowered = str(op.lower(operation, sch))
+            if self.print_transformed_ir:
+                self._print(lowered)
+            save_temp(f"{dump_base}.scheduled.txt", lowered)
+        if self.emit_c:
+            self._build_te_c(
+                op, operation, sch, func_name=packed_func_name, fname=emit_c_packed_base
+            )
+        if type in ["shlib", "arlib"]:
+            built = self._build_te(op, operation, sch, func_name=packed_func_name)
+            if self.save_temps:
+                for idx, mod in enumerate(built._collect_dso_modules()):
+                    llvm_ir = str(mod.get_source("ll"))
+                    save_temp(f"{dump_base}.lib{idx}.ll", llvm_ir)
+                    # This will generate a .tar with the .o files
+                    # built.export_library(f"{save_temps_dir}/{packed_lib_path}.tar")
+            if self.print_assembly:
+                with tempfile.TemporaryDirectory() as tdir:
+                    tmpname = f"{tdir}/built"
+                    fname = f"{packed_func_name}_compute_"
+                    self._export_library(built, tmpname, type="shlib")
+                    cmd_disassembler = (
+                        [objdump_bin]
+                        + [f"{tmpname}.so"]
+                        + objdump_opts
+                        + [f"--disassemble={fname}"]
+                    )
+                    if self.color:
+                        cmd_disassembler += objdump_color_opts
+                    self._print("Running", " ".join(cmd_disassembler))
+                    subprocess.run(cmd_disassembler, text=True)
+            self._export_library(built, packed_lib_path, type=type)
+
+        csrcs, shlibs, arlibs, headers = [], [], [], []
+        tvm_prefix = Path(tvm.__path__[0])
+        if self.bare_ptr:
+            wrapper = PackedOperatorWrapper(
+                op,
+                func_name,
+                packed_func_name,
+                cc_prefix=self._cc_prefix(),
+            )
+            if type == "shlib":
+                wrapper.build(lib_path, packed_lib_path, type=type)
+                shlibs = [f"{packed_lib_path}.so"]
+            elif type == "arlib":
+                wrapper.build(lib_path, packed_lib_path, type=type)
+                arlibs = [f"{packed_lib_path}.a"]
+            if self.emit_c:
+                wrapper.build(emit_c_base, emit_c_packed_base, type="csrc")
+                csrcs = [f"{emit_c_packed_base}.c"]
+        if Path(f"{lib_path}.h").exists():
+            headers = [f"{lib_path}.h"]
+        if type in ["shlib", "arlib"]:
+            shlibs += [f"{tvm_prefix}/libtvm_runtime.so"]
+            # As of now shared_lib/ar_lib takes priority over emit_c
+            return HostModule(
+                dump_base,
+                func_name,
+                f"{lib_path}.so" if type == "shlib" else f"{lib_path}.a",
+                type,
+                shlibs=shlibs,
+                arlibs=arlibs,
+                headers=headers,
+                bare_ptr=self.bare_ptr,
+                graph=self._backend._graph,
+            )
+        assert type == "csrc"
+        headers_path = [
+            str(path)
+            for path in [
+                tvm_prefix / "include",
+                tvm_prefix / "3rdparty" / "dlpack" / "include",
+            ]
+        ]
+        return HostModule(
+            dump_base,
+            func_name,
+            f"{lib_path}.c",
+            "csrc",
+            bare_ptr=self.bare_ptr,
+            csrcs=csrcs,
+            headers=headers,
+            headers_path=headers_path,
+            graph=self._backend._graph,
+        )
+
+    def _print(self, *content: Any) -> None:
+        print(*content, flush=True, file=self.print_file)
 
     def _save_temp(self, fname: str, content: str) -> None:
         if not self.save_temps:
@@ -66,86 +221,188 @@ class TVMCompiler(itf.comp.Compiler):
         with open(f"{self.save_temps_dir}/{fname}", "w") as outf:
             outf.write(content)
 
-    @override
-    def compile(self, schedule: itf.schd.Schedule) -> itf.comp.Module:
-        assert isinstance(schedule, backend.TVMSchedule)
-        assert self.dump_file is not None
-        save_temp = self._save_temp
-        op = self._backend._tvm_base
-        func_name = self.payload_name
-        packed_func_name = f"packed_{func_name}" if self.bare_ptr else func_name
-
-        dump_base = Path(self.dump_file).name
-        lib_path = self.dump_file
-        packed_lib_path = f"{lib_path}_packed" if self.bare_ptr else lib_path
-        operation = op.generate()
-        if self.print_source_ir or self.save_temps:
-            sch = op.schedule(operation)
-            lowered = str(op.lower(operation, sch))
-            if self.print_source_ir:
-                print(lowered, flush=True)
-            save_temp(f"{dump_base}.initial.txt", lowered)
-        schedule = cast(backend.TVMSchedule, schedule)
-        save_temp(f"{dump_base}.sched.txt", str(schedule))
-        if self.print_transformed_ir:
-            print(schedule, flush=True)
-        sch = op.schedule(operation, schedule)
-        if self.print_transformed_ir or self.save_temps:
-            lowered = str(op.lower(operation, sch))
-            if self.print_transformed_ir:
-                print(lowered, flush=True)
-            save_temp(f"{dump_base}.scheduled.txt", lowered)
-        if self.emit_c:
-            op.emit_c(
-                operation, sch, func_name=packed_func_name, dir=f"{lib_path}.export_c"
-            )
-        built = op.build(operation, sch, func_name=packed_func_name)
-        if self.save_temps:
-            for idx, mod in enumerate(built._collect_dso_modules()):
-                llvm_ir = str(mod.get_source("ll"))
-                save_temp(f"{dump_base}.lib{idx}.ll", llvm_ir)
-            # This will generate a .tar with the .o files
-            # built.export_library(f"{save_temps_dir}/{packed_lib_path}.tar")
-        if self.print_assembly:
-            with tempfile.TemporaryDirectory() as tdir:
-                soname = f"{tdir}/built.so"
-                fname = f"{packed_func_name}_compute_"
-                built.export_library(soname)
-                cmd_disassembler = (
-                    [objdump_bin] + [soname] + objdump_opts + [f"--disassemble={fname}"]
-                )
-                if self.color:
-                    cmd_disassembler += objdump_color_opts
-                print("Running", " ".join(cmd_disassembler))
-                subprocess.run(cmd_disassembler, text=True)
-        built.export_library(f"{packed_lib_path}.so")
-        if self.bare_ptr:
-            wrapper = PackedOperatorWrapper(
-                op, func_name, packed_func_name, f"{packed_lib_path}.so"
-            )
-            wrapper.build(lib_path)
-
-        return HostModule(
-            dump_base,
-            func_name,
-            f"{lib_path}.so",
-            "shlib",
-            bare_ptr=self.bare_ptr,
-            graph=self._backend._graph,
+    def _build_te(
+        self,
+        op: TVMBaseExpr,
+        tensors: Sequence[TETensor],
+        sch: te.Schedule,
+        func_name: str | None = None,
+    ) -> Any:
+        if func_name is None:
+            func_name = op.name
+        func_name = to_cname(func_name)
+        return self._tvm_build_crt(
+            sch,
+            tensors,
+            cname=func_name,
+            target=self.tvm_tgt,
         )
 
+    def _build_te_c(
+        self,
+        op: TVMBaseExpr,
+        tensors: Sequence[TETensor],
+        sch: te.Schedule,
+        func_name: str | None = None,
+        fname: str | None = None,
+    ) -> None:
+        if func_name is None:
+            func_name = op.name
+        if fname is None:
+            fname = func_name
+        func_name = to_cname(func_name)
+        self._tvm_emit_c(sch, tensors, self.tvm_tgt, func_name, fname)
 
-def jinja_generate_file(fname: str, template_fname: str, **kwargs: Any) -> None:
-    from jinja2 import Environment, FileSystemLoader
+    @classmethod
+    def _get_tvm_target_options(cls, target: str, arch: str) -> str:
+        """
+        Returm the tvm target options given the target and arch
+        """
+        if target == "native":
+            assert arch in ["native", ""]
+            return cls._get_tvm_native_target_options()
+        else:
+            assert arch != "native", f"can't pass native arch for non native target"
+        tvm_cpu = ""
+        tvm_attrs = ""
+        tvm_triple = ""
+        if target in ["x86_64"]:
+            tvm_triple = "x86_64-linux-gnu"
+            if arch == "avx512":
+                tvm_cpu = "skylake-avx512"
+            elif arch == "avx2":
+                tvm_cpu = "core-avx2"
+        elif target in ["aarch64"]:
+            tvm_triple = "aarch64-linux-gnu"
+            if arch == "neon":
+                tvm_cpu = "cortex-a72"
+                tvm_attrs = "+neon"
+        target_options = []
+        if tvm_triple:
+            target_options.append(f"-mtriple={tvm_triple}")
+        if tvm_cpu:
+            target_options.append(f"-mcpu={tvm_cpu}")
+        if tvm_attrs:
+            target_options.append(f"-mattr={tvm_attrs}")
+        return " ".join(target_options)
 
-    file_path = Path(fname)
-    template_path = Path(template_fname)
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    template = Environment(loader=FileSystemLoader(template_path.parent)).get_template(
-        template_path.name
-    )
-    with open(file_path, mode="w", encoding="utf-8") as file:
-        file.write(template.render(kwargs))
+    @classmethod
+    def _get_tvm_native_target_options(cls) -> str:
+        """
+        Returm the tvm target options to pass to llvm.
+        """
+        from cpuinfo import get_cpu_info
+
+        info = get_cpu_info()
+        arch = info["arch_string_raw"]
+        flags = info["flags"]
+        cpu, attrs, triple = "", "", ""
+        if arch == "x86_64":
+            triple = "x86_64-linux-gnu"
+            if "avx512f" in flags:
+                cpu = "skylake-avx512"
+            elif "avx2" in flags:
+                cpu = "core-avx2"
+        elif arch == "aarch64":
+            triple = "aarch64-linux-gnu"
+            if "asimd" in flags:
+                cpu = "cortex-a72"
+                attrs = "+neon"
+        target_options = []
+        if triple:
+            target_options.append(f"-mtriple={triple}")
+        if cpu:
+            target_options.append(f"-mcpu={cpu}")
+        if attrs:
+            target_options.append(f"-mattr={attrs}")
+        return " ".join(target_options)
+
+    @classmethod
+    def _tvm_build_crt_args(cls, target: str) -> dict[str, Any]:
+        # We use system-lib with crt runtime such that DSO loading works
+        # The generated .so can then be used:
+        # - for static compilation as soon as the tvm runtime is provided
+        # - for dynamic loading from python
+        # Recent version of tvm (i.e. 0.19) have a Runtime object
+        # Older version (i.e. 0.16) support passing runtime options in target
+        try:
+            from tvm.relay.backend import Runtime
+
+            runtime_kwargs = {
+                "runtime": Runtime("crt", {"system-lib": True}),
+            }
+        except:
+            runtime_kwargs = {}
+            target = f"{target} --system-lib --runtime=c"
+        return {
+            "target": target,
+            **runtime_kwargs,
+        }
+
+    @classmethod
+    def _tvm_build_crt(
+        cls, sch: Any, tensors: Sequence[TETensor], target: str, cname: str
+    ) -> Any:
+        build_kwargs = cls._tvm_build_crt_args(target)
+        config = {}
+        if target.startswith("c "):
+            config.update(
+                {
+                    "tir.disable_vectorize": True,
+                }
+            )
+        with tvm.transform.PassContext(opt_level=3, config=config):
+            return tvm.build(sch, list(tensors), name=cname, **build_kwargs)
+
+    @classmethod
+    def _tvm_emit_c(
+        cls,
+        sch: te.Schedule,
+        tensors: Sequence[TETensor],
+        target: str,
+        cname: str,
+        fname: str,
+    ) -> Any:
+        # Ignore initial target as of now and generate target agnostic C
+        target = "c -keys=arch -march=generic -mcpu=generic"
+        built = cls._tvm_build_crt(sch, tensors, target, cname)
+        out_dir = Path(fname).parent
+        out_base = Path(fname).stem
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir_path = Path(tmp_dir)
+
+            tar_file = tmp_dir_path / f"{cname}.tar"
+            built.export_library(tar_file)
+            with tarfile.open(tar_file) as tf:
+                tf.extractall(tmp_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy(tmp_dir_path / "lib1.c", out_dir / f"{out_base}.c")
+
+    def _cc_prefix(self) -> str:
+        map = {
+            "x86_64": "x86_64-linux-gnu-",
+            "aarch64": "aarch64-linux-gnu-",
+            "native": "",
+        }
+        assert self.target in map, (
+            f"unsupported target for cross compilation: {self.target}"
+        )
+        return map[self.target]
+
+    def _export_library(self, mod: Any, basename: str, type: str):
+        from tvm.contrib import cc
+
+        prefix = self._cc_prefix()
+        if type == "arlib":
+            fcompile = partial(cc.create_staticlib, ar=f"{prefix}ar")
+            mod.export_library(f"{basename}.a", fcompile=fcompile)
+            assert Path(f"{basename}.a").exists()
+        else:
+            fcompile = None
+            if prefix != "":
+                fcompile = cc.cross_compiler(f"{prefix}g++")
+            assert type == "shlib"
+            mod.export_library(f"{basename}.so", fcompile=fcompile)
 
 
 class PackedOperatorWrapper:
@@ -156,14 +413,14 @@ class PackedOperatorWrapper:
         operation: TVMBaseExpr,
         func_name: str,
         packed_func_name: str,
-        packed_lib_fname: str,
+        cc_prefix: str = "",
     ) -> None:
         self.operation = operation
         self.func_name = func_name
         self.packed_func_name = packed_func_name
-        self.packed_lib_path = Path(packed_lib_fname)
+        self._cc_prefix = cc_prefix
 
-    def generate_c(self, output_c_fname: str) -> None:
+    def generate_c(self, output_base: str) -> None:
         config = {
             "inputs": self.operation.np_inputs_spec(),
             "outputs": self.operation.np_outputs_spec(),
@@ -171,25 +428,74 @@ class PackedOperatorWrapper:
             "packed_func_name": self.packed_func_name,
         }
         jinja_generate_file(
-            output_c_fname,
+            f"{output_base}.c",
             str(self.TEMPLATES_DIR / "packed_op_wrapper.c.jinja"),
             **config,
         )
+        jinja_generate_file(
+            f"{output_base}.h",
+            str(self.TEMPLATES_DIR / "unpacked_op.h.jinja"),
+            **config,
+        )
 
-    def build(self, lib_fname: str) -> None:
-        output_dir = Path(lib_fname).parent
-        output_so = f"{Path(lib_fname).stem}.so"
-        packed_lib_dir = self.packed_lib_path.parent
-        packed_lib_name = self.packed_lib_path.name
-        assert packed_lib_dir == output_dir, (
+    def build(self, lib_fname: str, packed_lib_fname: str, type: str) -> None:
+        unpacked_lib_dir = Path(lib_fname).parent
+        unpacked_lib_base = Path(lib_fname).stem
+        packed_lib_dir = Path(packed_lib_fname).parent
+        packed_lib_name = Path(packed_lib_fname).stem
+        assert packed_lib_dir == unpacked_lib_dir, (
             f"must generate wrapper at the same location as packed lib"
         )
         with tempfile.TemporaryDirectory() as tdir:
-            output_c = f"{Path(tdir) / Path(lib_fname).stem}.c"
-            self.generate_c(output_c)
-            cmd = f"gcc --shared -fPIC -O2 {output_c} -o {output_so} {packed_lib_name} -Wl,--rpath,$ORIGIN"
-            p = subprocess.run(
-                shlex.split(cmd), text=True, capture_output=True, cwd=output_dir
-            )
-        if p.returncode != 0:
-            raise RuntimeError(f"Failed command {cmd}:\n{p.stdout}\n{p.stderr}\n")
+            output_base = str(Path(tdir) / Path(lib_fname).stem)
+            self.generate_c(output_base)
+            shutil.copy(f"{output_base}.h", unpacked_lib_dir / f"{unpacked_lib_base}.h")
+            if type == "csrc":
+                shutil.copy(
+                    f"{output_base}.c", unpacked_lib_dir / f"{unpacked_lib_base}.c"
+                )
+            elif type == "shlib":
+                cmd = (
+                    f"{self._cc_prefix}gcc --shared -fPIC -O2 {output_base}.c "
+                    f"-o {unpacked_lib_base}.so "
+                    f"{packed_lib_name}.so -Wl,--rpath,$ORIGIN"
+                )
+                p = subprocess.run(
+                    shlex.split(cmd),
+                    text=True,
+                    capture_output=True,
+                    cwd=unpacked_lib_dir,
+                )
+                if p.returncode != 0:
+                    raise RuntimeError(
+                        f"Failed command {cmd}:\n{p.stdout}\n{p.stderr}\n"
+                    )
+            elif type == "arlib":
+                cmd = (
+                    f"{self._cc_prefix}gcc -c -O2 {output_base}.c "
+                    f"-o {unpacked_lib_base}.o"
+                )
+                p = subprocess.run(
+                    shlex.split(cmd),
+                    text=True,
+                    capture_output=True,
+                    cwd=unpacked_lib_dir,
+                )
+                if p.returncode != 0:
+                    raise RuntimeError(
+                        f"Failed command {cmd}:\n{p.stdout}\n{p.stderr}\n"
+                    )
+                cmd = (
+                    f"{self._cc_prefix}ar -crs {unpacked_lib_base}.a "
+                    f"{unpacked_lib_base}.o"
+                )
+                p = subprocess.run(
+                    shlex.split(cmd),
+                    text=True,
+                    capture_output=True,
+                    cwd=unpacked_lib_dir,
+                )
+                if p.returncode != 0:
+                    raise RuntimeError(
+                        f"Failed command {cmd}:\n{p.stdout}\n{p.stderr}\n"
+                    )
