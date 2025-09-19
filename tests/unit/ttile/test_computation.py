@@ -39,7 +39,7 @@ def test_compute_footprint_2():
 def test_compute_footprint_3():
 	comp = Computation(Computation_spec.CONV, 4) # float32
 	d_arrays_accs = get_array_accesses(comp)
-	d_lsizes = { "c": [8], "f": [4,8], "r": [4], "s": [3], "h" : [32,16], "w" : [7], "n": [1] }
+	d_lsizes = { "c": [8], "f": [4,8], "r": [4], "s": [3], "h" : [32,16], "w" : [7], "b": [1] }
 	ddfootprint = compute_footprint(comp, d_arrays_accs, d_lsizes)
 
 	assert(ddfootprint == {'h*0,f*0': {'O': 896, 'I': 2520, 'K': 384},

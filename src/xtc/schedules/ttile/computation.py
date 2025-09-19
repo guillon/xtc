@@ -52,7 +52,7 @@ class Computation:
 # Note that it uses the h/w r/s convention for conv2d (because of renaming)
 def get_parallel_dims(comp: Computation) -> List[str]:
     if comp.spec == Computation_spec.CONV:
-        parallel_dims = ["n", "h", "w", "f"]
+        parallel_dims = ["b", "h", "w", "f"]
     elif comp.spec == Computation_spec.MATMULT:
         parallel_dims = ["i", "j"]
     else:
@@ -78,7 +78,7 @@ def get_ldims_computation(comp: Computation) -> List[str]:
     if comp.spec == Computation_spec.MATMULT:
         return ["i", "j", "k"]
     elif comp.spec == Computation_spec.CONV:
-        return ["n", "h", "w", "f", "r", "s", "c"]
+        return ["b", "h", "w", "f", "r", "s", "c"]
     else:
         raise ValueError("get_ldims_computation :: unknown computation spec.")
 
@@ -119,8 +119,8 @@ def get_array_accesses(comp: Computation) -> dict[str, Tuple[List[str], int]]:
         return d_arrays_accs
     elif comp.spec == Computation_spec.CONV:
         d_arrays_accs = dict()
-        d_arrays_accs["O"] = (["n", "h", "w", "f"], 2)
-        d_arrays_accs["I"] = (["n", "h * strx + r", "w * stry + s", "c"], 1)
+        d_arrays_accs["O"] = (["b", "h", "w", "f"], 2)
+        d_arrays_accs["I"] = (["b", "h * strx + r", "w * stry + s", "c"], 1)
         d_arrays_accs["K"] = (["r", "s", "c", "f"], 1)
         return d_arrays_accs
     else:
@@ -275,7 +275,7 @@ def get_strict_reuse_dims(comp: Computation) -> dict[str, List[str]]:
         d_reuse = dict()
         d_reuse["O"] = ["r", "s", "c"]
         d_reuse["I"] = ["f"]
-        d_reuse["K"] = ["n", "h", "w"]
+        d_reuse["K"] = ["b", "h", "w"]
         return d_reuse
     else:
         raise ValueError("get_reuse_dims :: unknown computation spec.")

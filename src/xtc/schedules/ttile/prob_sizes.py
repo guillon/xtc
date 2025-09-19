@@ -9,7 +9,7 @@ from typing import Dict
 
 ddsizes_Yolo: dict[str, dict[str, int]] = dict()
 ddsizes_Yolo["Yolo9000_00"] = {
-    "n": 1,
+    "b": 1,
     "f": 32,
     "c": 3,
     "y": 544,
@@ -20,7 +20,7 @@ ddsizes_Yolo["Yolo9000_00"] = {
     "stry": 1,
 }
 ddsizes_Yolo["Yolo9000_02"] = {
-    "n": 1,
+    "b": 1,
     "f": 64,
     "c": 32,
     "y": 272,
@@ -31,7 +31,7 @@ ddsizes_Yolo["Yolo9000_02"] = {
     "stry": 1,
 }
 ddsizes_Yolo["Yolo9000_04"] = {
-    "n": 1,
+    "b": 1,
     "f": 128,
     "c": 64,
     "y": 136,
@@ -42,7 +42,7 @@ ddsizes_Yolo["Yolo9000_04"] = {
     "stry": 1,
 }
 ddsizes_Yolo["Yolo9000_05"] = {
-    "n": 1,
+    "b": 1,
     "f": 64,
     "c": 128,
     "y": 136,
@@ -53,7 +53,7 @@ ddsizes_Yolo["Yolo9000_05"] = {
     "stry": 1,
 }
 ddsizes_Yolo["Yolo9000_08"] = {
-    "n": 1,
+    "b": 1,
     "f": 256,
     "c": 128,
     "y": 68,
@@ -64,7 +64,7 @@ ddsizes_Yolo["Yolo9000_08"] = {
     "stry": 1,
 }
 ddsizes_Yolo["Yolo9000_09"] = {
-    "n": 1,
+    "b": 1,
     "f": 128,
     "c": 256,
     "y": 68,
@@ -75,7 +75,7 @@ ddsizes_Yolo["Yolo9000_09"] = {
     "stry": 1,
 }
 ddsizes_Yolo["Yolo9000_12"] = {
-    "n": 1,
+    "b": 1,
     "f": 512,
     "c": 256,
     "y": 34,
@@ -86,7 +86,7 @@ ddsizes_Yolo["Yolo9000_12"] = {
     "stry": 1,
 }
 ddsizes_Yolo["Yolo9000_13"] = {
-    "n": 1,
+    "b": 1,
     "f": 256,
     "c": 512,
     "y": 34,
@@ -97,7 +97,7 @@ ddsizes_Yolo["Yolo9000_13"] = {
     "stry": 1,
 }
 ddsizes_Yolo["Yolo9000_18"] = {
-    "n": 1,
+    "b": 1,
     "f": 1024,
     "c": 512,
     "y": 17,
@@ -108,7 +108,7 @@ ddsizes_Yolo["Yolo9000_18"] = {
     "stry": 1,
 }
 ddsizes_Yolo["Yolo9000_19"] = {
-    "n": 1,
+    "b": 1,
     "f": 512,
     "c": 1024,
     "y": 17,
@@ -119,7 +119,7 @@ ddsizes_Yolo["Yolo9000_19"] = {
     "stry": 1,
 }
 ddsizes_Yolo["Yolo9000_23"] = {
-    "n": 1,
+    "b": 1,
     "f": 28272,
     "c": 1024,
     "y": 17,
@@ -135,7 +135,7 @@ ddsizes_Yolo["Yolo9000_23"] = {
 # We can still use its sizes for a proof of concept.
 ddsizes_MobilNet: dict[str, dict[str, int]] = dict()
 ddsizes_MobilNet["MobilNet_01"] = {
-    "n": 1,
+    "b": 1,
     "f": 32,
     "c": 32,
     "y": 112,
@@ -146,7 +146,7 @@ ddsizes_MobilNet["MobilNet_01"] = {
     "stry": 1,
 }
 ddsizes_MobilNet["MobilNet_02"] = {
-    "n": 1,
+    "b": 1,
     "f": 64,
     "c": 64,
     "y": 112,
@@ -157,7 +157,7 @@ ddsizes_MobilNet["MobilNet_02"] = {
     "stry": 2,
 }
 ddsizes_MobilNet["MobilNet_03"] = {
-    "n": 1,
+    "b": 1,
     "f": 128,
     "c": 128,
     "y": 56,
@@ -168,7 +168,7 @@ ddsizes_MobilNet["MobilNet_03"] = {
     "stry": 1,
 }
 ddsizes_MobilNet["MobilNet_04"] = {
-    "n": 1,
+    "b": 1,
     "f": 128,
     "c": 128,
     "y": 56,
@@ -179,7 +179,7 @@ ddsizes_MobilNet["MobilNet_04"] = {
     "stry": 2,
 }
 ddsizes_MobilNet["MobilNet_05"] = {
-    "n": 1,
+    "b": 1,
     "f": 256,
     "c": 256,
     "y": 28,
@@ -190,7 +190,7 @@ ddsizes_MobilNet["MobilNet_05"] = {
     "stry": 1,
 }
 ddsizes_MobilNet["MobilNet_06"] = {
-    "n": 1,
+    "b": 1,
     "f": 256,
     "c": 256,
     "y": 28,
@@ -201,7 +201,7 @@ ddsizes_MobilNet["MobilNet_06"] = {
     "stry": 2,
 }
 ddsizes_MobilNet["MobilNet_07"] = {
-    "n": 1,
+    "b": 1,
     "f": 512,
     "c": 512,
     "y": 14,
@@ -212,7 +212,7 @@ ddsizes_MobilNet["MobilNet_07"] = {
     "stry": 1,
 }
 ddsizes_MobilNet["MobilNet_08"] = {
-    "n": 1,
+    "b": 1,
     "f": 512,
     "c": 512,
     "y": 14,
@@ -223,7 +223,7 @@ ddsizes_MobilNet["MobilNet_08"] = {
     "stry": 2,
 }
 ddsizes_MobilNet["MobilNet_09"] = {
-    "n": 1,
+    "b": 1,
     "f": 1024,
     "c": 1024,
     "y": 7,
@@ -237,7 +237,7 @@ ddsizes_MobilNet["MobilNet_09"] = {
 
 ddsizes_RN18: dict[str, dict[str, int]] = dict()
 ddsizes_RN18["ResNet18_01"] = {
-    "n": 1,
+    "b": 1,
     "f": 64,
     "c": 3,
     "y": 224,
@@ -248,7 +248,7 @@ ddsizes_RN18["ResNet18_01"] = {
     "stry": 2,
 }
 ddsizes_RN18["ResNet18_02"] = {
-    "n": 1,
+    "b": 1,
     "f": 64,
     "c": 64,
     "y": 56,
@@ -259,7 +259,7 @@ ddsizes_RN18["ResNet18_02"] = {
     "stry": 1,
 }
 ddsizes_RN18["ResNet18_03"] = {
-    "n": 1,
+    "b": 1,
     "f": 64,
     "c": 64,
     "y": 56,
@@ -270,7 +270,7 @@ ddsizes_RN18["ResNet18_03"] = {
     "stry": 1,
 }
 ddsizes_RN18["ResNet18_04"] = {
-    "n": 1,
+    "b": 1,
     "f": 128,
     "c": 64,
     "y": 56,
@@ -281,7 +281,7 @@ ddsizes_RN18["ResNet18_04"] = {
     "stry": 2,
 }
 ddsizes_RN18["ResNet18_05"] = {
-    "n": 1,
+    "b": 1,
     "f": 128,
     "c": 64,
     "y": 56,
@@ -292,7 +292,7 @@ ddsizes_RN18["ResNet18_05"] = {
     "stry": 2,
 }
 ddsizes_RN18["ResNet18_06"] = {
-    "n": 1,
+    "b": 1,
     "f": 128,
     "c": 128,
     "y": 28,
@@ -303,7 +303,7 @@ ddsizes_RN18["ResNet18_06"] = {
     "stry": 1,
 }
 ddsizes_RN18["ResNet18_07"] = {
-    "n": 1,
+    "b": 1,
     "f": 256,
     "c": 128,
     "y": 28,
@@ -314,7 +314,7 @@ ddsizes_RN18["ResNet18_07"] = {
     "stry": 2,
 }
 ddsizes_RN18["ResNet18_08"] = {
-    "n": 1,
+    "b": 1,
     "f": 256,
     "c": 128,
     "y": 28,
@@ -325,7 +325,7 @@ ddsizes_RN18["ResNet18_08"] = {
     "stry": 1,
 }
 ddsizes_RN18["ResNet18_09"] = {
-    "n": 1,
+    "b": 1,
     "f": 256,
     "c": 256,
     "y": 14,
@@ -336,7 +336,7 @@ ddsizes_RN18["ResNet18_09"] = {
     "stry": 1,
 }
 ddsizes_RN18["ResNet18_10"] = {
-    "n": 1,
+    "b": 1,
     "f": 512,
     "c": 512,
     "y": 14,
@@ -347,7 +347,7 @@ ddsizes_RN18["ResNet18_10"] = {
     "stry": 2,
 }
 ddsizes_RN18["ResNet18_11"] = {
-    "n": 1,
+    "b": 1,
     "f": 512,
     "c": 256,
     "y": 14,
@@ -358,7 +358,7 @@ ddsizes_RN18["ResNet18_11"] = {
     "stry": 2,
 }
 ddsizes_RN18["ResNet18_12"] = {
-    "n": 1,
+    "b": 1,
     "f": 512,
     "c": 512,
     "y": 7,

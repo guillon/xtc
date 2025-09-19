@@ -41,10 +41,11 @@ def test_get_descr_sched_graph_1():
   scheme = build_scheme_from_str(str_scheme)
   scheme = subst_dimname_xyhw_to_hwrs_conv2D_scheme(scheme)
   
-  #dsizes = {"n" : 1, "f" : 128, "c": 64, "h": 28, "w": 28, "r": 3, "s": 3, "strx": 1, "stry": 1}
+  #dsizes = {"b" : 1, "f" : 128, "c": 64, "h": 28, "w": 28, "r": 3, "s": 3, "strx": 1, "stry": 1}
   
   str_descriptor = get_descr_sched(scheme, comp, machine, True)
   expected_str = """{
+"b": {},
 "r": {},
 "s": {},
 "h": {},
@@ -69,12 +70,12 @@ def test_get_descr_sched_graph_2():
   scheme = build_scheme_from_str(str_scheme)
   scheme = subst_dimname_xyhw_to_hwrs_conv2D_scheme(scheme)
   
-  #dsizes = {"n" : 1, "f" : 64, "c": 32, "h": 272, "w": 272, "r": 3, "s": 3, "strx": 1, "stry": 1}
+  #dsizes = {"b" : 1, "f" : 64, "c": 32, "h": 272, "w": 272, "r": 3, "s": 3, "strx": 1, "stry": 1}
 
   str_descriptor = get_descr_sched(scheme, comp, machine, True)
   d_desc = eval(str_descriptor)
   
-  str_expected = "{'w[0:160]': {'w#160': {}, 'w#80': {}, 's': {}, 'w#20': {}, 'h': {}, 'r': {}, 'c': {}, 'w#10': {}, 'h#68': {}, 'h#34': {}, 'c#16': {}, 'c#2': {'unroll': 2}, 'w#5': {'unroll': 5}, 'f': {'unroll': 64}, 'f#16': {'vectorize': None}}, 'w[160:272]': {'w#112': {}, 's': {}, 'w#28': {}, 'h': {}, 'r': {}, 'c': {}, 'w#14': {}, 'h#68': {}, 'h#34': {}, 'c#16': {}, 'c#2': {'unroll': 2}, 'w#7': {'unroll': 7}, 'f': {'unroll': 64}, 'f#16': {'vectorize': None}}}"
+  str_expected = "{'b': {}, 'w[0:160]': {'w#160': {}, 'w#80': {}, 's': {}, 'w#20': {}, 'h': {}, 'r': {}, 'c': {}, 'w#10': {}, 'h#68': {}, 'h#34': {}, 'c#16': {}, 'c#2': {'unroll': 2}, 'w#5': {'unroll': 5}, 'f': {'unroll': 64}, 'f#16': {'vectorize': None}}, 'w[160:272]': {'w#112': {}, 's': {}, 'w#28': {}, 'h': {}, 'r': {}, 'c': {}, 'w#14': {}, 'h#68': {}, 'h#34': {}, 'c#16': {}, 'c#2': {'unroll': 2}, 'w#7': {'unroll': 7}, 'f': {'unroll': 64}, 'f#16': {'vectorize': None}}}"
   
   assert(str(d_desc) == str_expected)
   return
@@ -137,17 +138,18 @@ def test_build_xdsl_module_string_conv():
 ) {
   linalg.generic {
       indexing_maps = [
-        affine_map<(n,h,w,f,r,s,c) -> (n,h+r,w+s,c)>,
-        affine_map<(n,h,w,f,r,s,c) -> (r,s,c,f)>,
-        affine_map<(n,h,w,f,r,s,c) -> (n,h,w,f)>],
+        affine_map<(b,h,w,f,r,s,c) -> (b,h+r,w+s,c)>,
+        affine_map<(b,h,w,f,r,s,c) -> (r,s,c,f)>,
+        affine_map<(b,h,w,f,r,s,c) -> (b,h,w,f)>],
       iterator_types = ["parallel", "parallel", "parallel", "parallel",
           "reduction", "reduction", "reduction"]
     }
     ins(%I, %K : memref<1x3x3x64xf32>, memref<3x3x64x128xf32>)
     outs(%O : memref<1x1x1x128xf32>)
      attrs = {
-      loop.dims = ["n","h","w","f","r","s","c"],
+      loop.dims = ["b","h","w","f","r","s","c"],
       loop.schedule = {
+"b",
 "r",
 "s",
 "h",
@@ -210,7 +212,7 @@ def test_launch_and_measure_scheme_matmul_2():
 # WARNING - actual execution on a machine. This was done on "laptop_guillaume_machine"
 def test_launch_and_measure_scheme_conv():
   comp = Computation(Computation_spec.CONV, 4)  # f32
-  dsizes = {"f" : 64, "c": 32, "h": 1, "w": 1, "r": 1, "s": 1, "strx": 1, "stry": 1}
+  dsizes = {"b": 1, "f" : 64, "c": 32, "h": 1, "w": 1, "r": 1, "s": 1, "strx": 1, "stry": 1}
   str_scheme = "[V (F, 16); U (F, 2); U (C, 4); T (C, 16); (T (F, 2))]"
   scheme = build_scheme_from_str(str_scheme)
   machine = laptop_guillaume_machine
@@ -266,7 +268,7 @@ def test_launch_and_measure_scheme_graph_interf_conv_mlir():
 	str_scheme = "[V (F, 16); U (F, 4); U (X, 2); U (Y, 2); U (C, 4); T (C, 16); T (F, 2); T (X, 7); T (Y, 14); T (X, 2); T (W, 3); T (H, 3)]"
 	scheme = build_scheme_from_str(str_scheme)
 	
-	dsizes = {"n" : 1, "f" : 128, "c": 64, "x": 28, "y": 28, "h": 3, "w": 3, "strx": 1, "stry": 1}
+	dsizes = {"b" : 1, "f" : 128, "c": 64, "x": 28, "y": 28, "h": 3, "w": 3, "strx": 1, "stry": 1}
 	
 	backend = "mlir"
 	#backend = "tvm"
@@ -284,7 +286,7 @@ def test_launch_and_measure_scheme_graph_interf_conv_tvm():
 	str_scheme = "[V (F, 16); U (F, 4); U (X, 2); U (Y, 2); U (C, 4); T (C, 16); T (F, 2); T (X, 7); T (Y, 14); T (X, 2); T (W, 3); T (H, 3)]"
 	scheme = build_scheme_from_str(str_scheme)
 	
-	dsizes = {"n" : 1, "f" : 128, "c": 64, "x": 28, "y": 28, "h": 3, "w": 3, "strx": 1, "stry": 1}
+	dsizes = {"b" : 1, "f" : 128, "c": 64, "x": 28, "y": 28, "h": 3, "w": 3, "strx": 1, "stry": 1}
 	
 	backend = "tvm"
 
@@ -301,7 +303,7 @@ def test_launch_and_measure_scheme_graph_interf_conv_tvm_f64():
 	str_scheme = "[V (F, 8); U (F, 4); U (X, 2); U (Y, 2); U (C, 4); T (C, 16); T (F, 2); T (X, 7); T (Y, 14); T (X, 2); T (W, 3); T (H, 3)]"
 	scheme = build_scheme_from_str(str_scheme)
 	
-	dsizes = {"n" : 1, "f" : 128, "c": 64, "x": 28, "y": 28, "h": 3, "w": 3, "strx": 1, "stry": 1}
+	dsizes = {"b" : 1, "f" : 128, "c": 64, "x": 28, "y": 28, "h": 3, "w": 3, "strx": 1, "stry": 1}
 	
 	backend = "tvm"
 

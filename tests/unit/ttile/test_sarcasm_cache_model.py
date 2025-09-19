@@ -14,13 +14,13 @@ from xtc.schedules.ttile.cache_model.sarcasm_set_assoc_model import periodic_ext
 # Test of the "build_maccess_func_coeff" function
 def test_build_maccess_func_coeff_1():
 	comp = Computation(Computation_spec.CONV, 4)
-	prob_sizes = {"n" : 1, "f" :  64, "c":  64, "h": 112, "w": 112, "r": 3, "s": 3, "strx": 2, "stry": 2}
+	prob_sizes = {"b" : 1, "f" :  64, "c":  64, "h": 112, "w": 112, "r": 3, "s": 3, "strx": 2, "stry": 2}
 	cache_line_size = 16
 
 	maccess_func_dim_name_coeff = build_maccess_func_coeff(comp, prob_sizes, cache_line_size)
 
-	expected_result = { 'O': [(50176, 'n'), (448, 'h'), (4, 'w'), (1, 'f')],
-		'I': [(204304, 'n'), (1808, 'h'), (904, 'r'), (8, 'w'), (4, 's'), (1, 'c')],
+	expected_result = { 'O': [(50176, 'b'), (448, 'h'), (4, 'w'), (1, 'f')],
+		'I': [(204304, 'b'), (1808, 'h'), (904, 'r'), (8, 'w'), (4, 's'), (1, 'c')],
 		'K': [(768, 'r'), (256, 's'), (4, 'c'), (1, 'f')] }
 	assert(maccess_func_dim_name_coeff == expected_result)
 
@@ -30,7 +30,7 @@ def test_build_maccess_func_coeff_1():
 # Tests of the "build_bound_tiles_cacheline" function
 def test_build_bound_tiles_cacheline_1():
 	comp = Computation(Computation_spec.CONV, 4)
-	prob_sizes = {"n" : 1, "f" :  64, "c":  64, "h": 112, "w": 112, "r": 3, "s": 3, "strx": 2, "stry": 2}
+	prob_sizes = {"b" : 1, "f" :  64, "c":  64, "h": 112, "w": 112, "r": 3, "s": 3, "strx": 2, "stry": 2}
 	cache_line_size = 16
 
 	maccess_func_dim_name_coeff = build_maccess_func_coeff(comp, prob_sizes, cache_line_size)
@@ -46,8 +46,8 @@ def test_build_bound_tiles_cacheline_1():
 	ld_bound_tiles_cacheline_O = build_bound_tiles_cacheline(comp, llstride_dimname_O, d_ltilesizes, cache_line_size)
 
 	# Result
-	assert(d_ltilesizes=={'n': [1], 'h': [1], 'w': [9, 14], 'f': [64], 'r': [3], 's': [1], 'c': [8], 'strx': [1], 'stry': [1]})
-	assert(llstride_dimname_O == [(50176, 'n'), (448, 'h'), (4, 'w'), (1, 'f')])
+	assert(d_ltilesizes=={'b': [1], 'h': [1], 'w': [9, 14], 'f': [64], 'r': [3], 's': [1], 'c': [8], 'strx': [1], 'stry': [1]})
+	assert(llstride_dimname_O == [(50176, 'b'), (448, 'h'), (4, 'w'), (1, 'f')])
 	assert(ld_bound_tiles_cacheline_O == [{'w*0': 1, 'w*1': 1}, {'w*0': 1, 'w*1': 1},
 		{'w*0': 9, 'w*1': 14}, {'w*0': 4, 'w*1': 4}])
 
@@ -55,7 +55,7 @@ def test_build_bound_tiles_cacheline_1():
 
 def test_build_bound_tiles_cacheline_2():
 	comp = Computation(Computation_spec.CONV, 4)
-	prob_sizes = {"n" : 1, "f" :  64, "c":  64, "h": 112, "w": 112, "r": 3, "s": 3, "strx": 2, "stry": 2}
+	prob_sizes = {"b" : 1, "f" :  64, "c":  64, "h": 112, "w": 112, "r": 3, "s": 3, "strx": 2, "stry": 2}
 	cache_line_size = 16
 
 	maccess_func_dim_name_coeff = build_maccess_func_coeff(comp, prob_sizes, cache_line_size)
@@ -71,9 +71,9 @@ def test_build_bound_tiles_cacheline_2():
 	ld_bound_tiles_cacheline_I = build_bound_tiles_cacheline(comp, llstride_dimname_I, d_ltilesizes, cache_line_size)
 
 	# Result
-	assert(d_ltilesizes == {'n': [1], 'h': [1], 'w': [9, 14], 'f': [64], 'r': [3], 's': [1], 'c': [8],
+	assert(d_ltilesizes == {'b': [1], 'h': [1], 'w': [9, 14], 'f': [64], 'r': [3], 's': [1], 'c': [8],
 			'strx': [1], 'stry': [1]})
-	assert(llstride_dimname_I == [(204304, 'n'), (1808, 'h'), (904, 'r'), (8, 'w'), (4, 's'), (1, 'c')])
+	assert(llstride_dimname_I == [(204304, 'b'), (1808, 'h'), (904, 'r'), (8, 'w'), (4, 's'), (1, 'c')])
 	assert(ld_bound_tiles_cacheline_I ==[{'w*0': 1, 'w*1': 1}, {'w*0': 1, 'w*1': 1},
 			{'w*0': 3, 'w*1': 3}, {'w*0': 9, 'w*1': 14},
 			{'w*0': 1, 'w*1': 1}, {'w*0': 1, 'w*1': 1}])
@@ -124,7 +124,7 @@ def test_sum_with_shift_1():
 # Test of the "dl_fp_direct_computation" function
 def test_dl_fp_direct_computation_1():
 	comp = Computation(Computation_spec.CONV, 4)
-	prob_sizes = {"n" : 1, "f" :  64, "c":  64, "h": 112, "w": 112, "r": 3, "s": 3, "strx": 2, "stry": 2}
+	prob_sizes = {"b" : 1, "f" :  64, "c":  64, "h": 112, "w": 112, "r": 3, "s": 3, "strx": 2, "stry": 2}
 	cache_line_size = 16
 
 	maccess_func_dim_name_coeff = build_maccess_func_coeff(comp, prob_sizes, cache_line_size)
@@ -158,7 +158,7 @@ def test_dl_fp_direct_computation_1():
 # Tests of the "arrange_ld_btcl_combi_dims" function
 def test_arrange_ld_btcl_combi_dims_1():
 	ldims_combi = ['h', 'r']
-	ll_stride_dimname = [[204304, 'n'], [1808, 'h'], [904, 'r'], [8, 'w'], [4, 's'], [1, 'c']]
+	ll_stride_dimname = [[204304, 'b'], [1808, 'h'], [904, 'r'], [8, 'w'], [4, 's'], [1, 'c']]
 
 	# Not consecutive (holes inside)
 	ld_bound_tiles_cacheline = [{'': 1}, {'':10}, {'':1}, {'':1}, {'':1}, {'': 2}]
@@ -170,7 +170,7 @@ def test_arrange_ld_btcl_combi_dims_1():
 
 def test_arrange_ld_btcl_combi_dims_2():
 	ldims_combi = ['h', 'r']
-	ll_stride_dimname = [[204304, 'n'], [1808, 'h'], [904, 'r'], [8, 'w'], [4, 's'], [1, 'c']]
+	ll_stride_dimname = [[204304, 'b'], [1808, 'h'], [904, 'r'], [8, 'w'], [4, 's'], [1, 'c']]
 
 	# Consecutive interval
 	ld_bound_tiles_cacheline = [{'': 1}, {'':10}, {'':3}, {'':1}, {'':1}, {'': 2}]
@@ -182,7 +182,7 @@ def test_arrange_ld_btcl_combi_dims_2():
 
 def test_arrange_ld_btcl_combi_dims_3():
 	ldims_combi = ['h', 'r']
-	ll_stride_dimname = [[45, 'n'], [9, 'h'], [3, 'r'], [3, 'w'], [1, 's'], [1, 'c']]
+	ll_stride_dimname = [[45, 'b'], [9, 'h'], [3, 'r'], [3, 'w'], [1, 's'], [1, 'c']]
 
 	# Consecutive interval
 	ld_bound_tiles_cacheline = [{'': 1}, {'':5}, {'':1}, {'':1}, {'':1}, {'': 1}]
@@ -198,7 +198,7 @@ def test_periodic_extra_cacheset_estimation_lvl_1():
 	str_scheme = "[V(F,16); U(F,2); T(C,16)]"
 	scheme = build_scheme_from_str(str_scheme)
 	scheme = subst_dimname_xyhw_to_hwrs_conv2D_scheme(scheme)
-	prob_sizes = {"n" : 1, "f" :  32, "c":  16, "h": 1, "w": 1, "r": 1, "s": 1, "strx": 3, "stry": 3}
+	prob_sizes = {"b" : 1, "f" :  32, "c":  16, "h": 1, "w": 1, "r": 1, "s": 1, "strx": 3, "stry": 3}
 
 	comp = Computation(Computation_spec.CONV, 4)
 
@@ -243,7 +243,7 @@ def test_periodic_extra_cacheset_estimation_lvl_2():
 	str_scheme = "[V(F,16); U(F,2); T(C,16); T(X,5)]"
 	scheme = build_scheme_from_str(str_scheme)
 	scheme = subst_dimname_xyhw_to_hwrs_conv2D_scheme(scheme)
-	prob_sizes = {"n" : 1, "f" :  32, "c":  16, "h": 5, "w": 1, "r": 1, "s": 1, "strx": 1, "stry": 1}
+	prob_sizes = {"b" : 1, "f" :  32, "c":  16, "h": 5, "w": 1, "r": 1, "s": 1, "strx": 1, "stry": 1}
 
 	comp = Computation(Computation_spec.CONV, 4)
 
@@ -295,7 +295,7 @@ def test_periodic_extra_cacheset_estimation_lvl_3():
 	str_scheme = "[V(F,16); U(F,2); T(C,16); T(F,2)]"
 	scheme = build_scheme_from_str(str_scheme)
 	scheme = subst_dimname_xyhw_to_hwrs_conv2D_scheme(scheme)
-	prob_sizes = {"n" : 1, "f" :  64, "c":  16, "h": 1, "w": 1, "r": 1, "s": 1, "strx": 1, "stry": 1}
+	prob_sizes = {"b" : 1, "f" :  64, "c":  16, "h": 1, "w": 1, "r": 1, "s": 1, "strx": 1, "stry": 1}
 
 	comp = Computation(Computation_spec.CONV, 4)
 
@@ -348,7 +348,7 @@ def test_periodic_extra_cacheset_estimation_lvl_4():
 	str_scheme = "[V(F,16); U(F,2); T(C,16); TL(F,[2,3]); TL(F,[5,5]); Seq(F)]"
 	scheme = build_scheme_from_str(str_scheme)
 	scheme = subst_dimname_xyhw_to_hwrs_conv2D_scheme(scheme)
-	prob_sizes = {"n" : 1, "f" :  800, "c":  16, "h": 1, "w": 1, "r": 1, "s": 1, "strx": 1, "stry": 1}
+	prob_sizes = {"b" : 1, "f" :  800, "c":  16, "h": 1, "w": 1, "r": 1, "s": 1, "strx": 1, "stry": 1}
 
 	comp = Computation(Computation_spec.CONV, 4)
 
@@ -429,7 +429,7 @@ def test_periodic_extra_cacheset_estimation_lvl_5():
 	str_scheme = "[V(F,16); U(F,2); T(C,16); TL(F,[2,3]); T(C,2); TL(F,[5,5]); Seq(F); T(C,2)]"
 	scheme = build_scheme_from_str(str_scheme)
 	scheme = subst_dimname_xyhw_to_hwrs_conv2D_scheme(scheme)
-	prob_sizes = {"n" : 1, "f" :  800, "c":  64, "h": 1, "w": 1, "r": 1, "s": 1, "strx": 1, "stry": 1}
+	prob_sizes = {"b" : 1, "f" :  800, "c":  64, "h": 1, "w": 1, "r": 1, "s": 1, "strx": 1, "stry": 1}
 
 	comp = Computation(Computation_spec.CONV, 4)
 

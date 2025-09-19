@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
-import os
 import tempfile
+from pathlib import Path
+import subprocess
+import logging
 
 from typing import List, Dict, Tuple, Any
 
@@ -21,6 +23,7 @@ from xtc.schedules.ttile.scheme import (
     Atom,
     AtomType,
     convert_scheme_to_str,
+    new_tile_atom,
 )
 from xtc.schedules.ttile.scheme import get_sizes_scheme
 from xtc.schedules.ttile.scheme import (
@@ -42,6 +45,8 @@ from xtc.backends.tvm import TVMBackend as TVMBackend
 from xtc.schedules.descript import descript_scheduler
 
 from xtc.utils.cpu import cpu_peak_time
+
+logger = logging.getLogger(__name__)
 
 # NOTE: Don't forget to activate the venv of XTC
 
@@ -141,6 +146,9 @@ def _get_spec_atom_ratio(
 
 # [Main function] Generate a string corresponding to the schedule descriptor, from the Ttile specification
 #
+# When the Ttile specification does not refer to all dimensions, missing dimensions are
+# completed in the initial computation dimensions order.
+#
 # Inputs:
 #  - scheme: the Ttile scheme (str)
 #  - comp: the considered computation
@@ -153,6 +161,14 @@ def get_descr_sched(
     scheme: List[Atom], comp: Computation, machine: Archi, b_is_graph_interface: bool
 ):
     ldims = get_ldims_computation(comp)
+
+    ldims_set = set(ldims)
+    scheme_set = set([atom.dim for atom in scheme if atom.dim is not None])
+    assert scheme_set.issubset(ldims_set), f"{scheme_set=} not a subset of {ldims_set=}"
+
+    # Complete scheme
+    outer_dims = [dim for dim in ldims if dim not in scheme_set]
+    scheme = scheme + [new_tile_atom(dim, 1) for dim in outer_dims[::-1]]
 
     # Dictionnary: [lambda_loc] --> string of spec (to be "eval(...)")
     d_current_str_desc = dict()
@@ -519,7 +535,7 @@ def build_xdsl_module_string_conv(
     # Recover the individual problem sizes
     size_n = 1  # Batch dim == 1
 
-    default_sizes = {"n": 1, "f": 1, "c": 1, "h": 1, "w": 1, "r": 1, "s": 1}
+    default_sizes = {"b": 1, "f": 1, "c": 1, "h": 1, "w": 1, "r": 1, "s": 1}
     dsizes = default_sizes | dsizes
 
     # Output/Input feature dimensions
@@ -553,8 +569,8 @@ def build_xdsl_module_string_conv(
         str_output += f"  %cst = arith.constant 0.000 : {fXX}\n"
         str_output += f"  linalg.fill\n"
         str_output += "    {\n"
-        str_output += '      loop.dims = ["n","h","w","f"],\n'
-        # str_output += f"      loop.parallel_dims = [\"n\",\"h\",\"w\",\"f\"],\n"
+        str_output += '      loop.dims = ["b","h","w","f"],\n'
+        # str_output += f"      loop.parallel_dims = [\"b\",\"h\",\"w\",\"f\"],\n"
         # str_output += f"      loop.reduction_dims = [],\n"
         str_output += "      loop.tiles_names = {"
         str_output += f'"f" = ["f1"]'
@@ -562,7 +578,7 @@ def build_xdsl_module_string_conv(
         str_output += "      loop.tiles_sizes = {"
         str_output += f"f1 = {num_elem_per_vec}"
         str_output += "},\n"
-        str_output += f'      loop.interchange = ["n","h","w","f","f1"],\n'
+        str_output += f'      loop.interchange = ["b","h","w","f","f1"],\n'
         str_output += f'      loop.vectorize = ["f1"]\n'
         # Note: this is a bad idea to add a loop.parallelize on n/h here
         str_output += "    }\n"
@@ -577,9 +593,9 @@ def build_xdsl_module_string_conv(
     # [MOD] Version of "conv_2d_nhwc_hwcf" with a generic
     str_output += "  linalg.generic {\n"
     str_output += "      indexing_maps = [\n"
-    str_output += "        affine_map<(n,h,w,f,r,s,c) -> (n,h+r,w+s,c)>,\n"
-    str_output += "        affine_map<(n,h,w,f,r,s,c) -> (r,s,c,f)>,\n"
-    str_output += "        affine_map<(n,h,w,f,r,s,c) -> (n,h,w,f)>],\n"
+    str_output += "        affine_map<(b,h,w,f,r,s,c) -> (b,h+r,w+s,c)>,\n"
+    str_output += "        affine_map<(b,h,w,f,r,s,c) -> (r,s,c,f)>,\n"
+    str_output += "        affine_map<(b,h,w,f,r,s,c) -> (b,h,w,f)>],\n"
     str_output += (
         '      iterator_types = ["parallel", "parallel", "parallel", "parallel",\n'
     )
@@ -591,7 +607,7 @@ def build_xdsl_module_string_conv(
     str_output += "     attrs = {\n"
 
     # This is the part where we plug the scheme in the text
-    str_output += '      loop.dims = ["n","h","w","f","r","s","c"],\n'
+    str_output += '      loop.dims = ["b","h","w","f","r","s","c"],\n'
     str_loop_sched = get_descr_sched(scheme, comp, machine, False)
     str_output += f"      loop.schedule = {str_loop_sched}\n"
     str_output += "     }\n"
@@ -625,32 +641,37 @@ def launch_and_measure_scheme(
     else:
         raise ValueError("launch_and_measure_scheme : Unknown computation spec.")
 
-    # Write it inside a temporary file
-    with tempfile.NamedTemporaryFile(mode="w", delete_on_close=False) as finput:
-        finput.write(str_input_xdsltransf)
-        finput.close()
+    logger.debug("launch_and_measure_scheme: mlir input:\n%s", str_input_xdsltransf)
 
-        # Number of elements inside a vector
-        vector_size_in_elem = int(machine.vector_size / comp.elem_size)
+    # Number of elements inside a vector
+    vector_size_in_elem = int(machine.vector_size / comp.elem_size)
+
+    # Write it inside a temporary file
+    with tempfile.TemporaryDirectory() as dir:
+        input_path = Path(dir) / "input.mlir"
+        with open(input_path, "w") as outf:
+            outf.write(str_input_xdsltransf)
 
         # Launch mlir-loop (from xdsl-transform) on this input, with the right options
-        with tempfile.NamedTemporaryFile(mode="r", delete_on_close=False) as ftime_meas:
-            cmd_xdsl_transf = f"mlir-loop {finput.name}"
-            # cmd_xdsl_transf += f" --llvm-dir={llvm_build_installation}"
-            cmd_xdsl_transf += f" --evaluate --no-alias --init-zero --vectors-size {vector_size_in_elem} "
-            cmd_xdsl_transf += f" > {ftime_meas.name}"
+        cmd_xdsl_transf = (
+            f"mlir-loop {input_path}"
+            # f" --llvm-dir={llvm_build_installation}"
+            f" --evaluate --no-alias --init-zero --vectors-size {vector_size_in_elem}"
+        )
 
-            # DEBUG
-            # print(cmd_xdsl_transf)
-            os.system(cmd_xdsl_transf)
+        logger.debug("launch_and_measure_scheme: executing cmd: %s", cmd_xdsl_transf)
 
-            # Note: possible to subst "mlir_loop" by "mlir_loop.py" if add the correct 2 lines at the end of its script.
+        p = subprocess.run(cmd_xdsl_transf, shell=True, text=True, capture_output=True)
+        if p.returncode != 0:
+            raise RuntimeError(
+                f"unable to run command: {cmd_xdsl_transf}\n"
+                f"stdout: {p.stdout}\n"
+                f"stderr: {p.stderr}\n"
+            )
 
-            # Recover the time
-            res_measurement = dict()
-            for line in ftime_meas:
-                res_measurement["time"] = float(line)
-    # Delete both temporary files
+    # Recover the time
+    res_measurement = dict()
+    res_measurement["time"] = float(p.stdout.strip())
 
     # Get the peak_perf
     # xdsl_transform got utils.py :: cpu_peak_time(ops: int, dtype: str, threads: int = 1)
@@ -665,9 +686,11 @@ def launch_and_measure_scheme(
         )
     peak_time = cpu_peak_time(num_ops, dtype)
 
-    # DEBUG
-    # print(f"measurement = {res_measurement['time']}")
-    # print(f"{peak_time=}")
+    logger.debug(
+        "launch_and_measure_scheme: peak_time: %s, measurement: %s",
+        peak_time,
+        res_measurement,
+    )
 
     # Compute peak_perf
     peak_perf = peak_time / res_measurement["time"]
@@ -688,21 +711,14 @@ def build_schedule_from_ttile(
     impl: Backend, comp: Computation, machine: Archi, scheme: List[Atom]
 ):
     sch = impl.get_scheduler()
-
-    # ldims: the dims that appears in the scheme
-    ldims = []
-    for atom in scheme:
-        if atom.dim not in ldims:
-            ldims.append(atom.dim)
-
+    ldims = get_ldims_computation(comp)
     name_op = str(comp.spec)
-
     str_descr_sched = get_descr_sched(scheme, comp, machine, True)
     spec_schedule = eval(str_descr_sched)
 
-    # DEBUG
-    # print(f"{spec_schedule=}")
-    # print(f"{ldims=}")
+    logger.debug(
+        "build_schedule_from_ttile: ldims: %s: spec_schedule: %s", ldims, spec_schedule
+    )
 
     descript_scheduler(
         scheduler=sch, node_name=name_op, abstract_axis=ldims, spec=spec_schedule
@@ -731,7 +747,7 @@ def launch_and_measure_scheme_graph_interf(
 
         # Getting the sizes
         default_sizes = {
-            "n": 1,
+            "b": 1,
             "f": 1,
             "c": 1,
             "h": 1,
@@ -743,7 +759,7 @@ def launch_and_measure_scheme_graph_interf(
         }
         dsizes = default_sizes | dsizes
 
-        size_n = dsizes["n"]
+        size_b = dsizes["b"]
         size_f = dsizes["f"]
         size_c = dsizes["c"]
         size_h = dsizes["h"]
@@ -755,7 +771,7 @@ def launch_and_measure_scheme_graph_interf(
         assert dsizes["stry"] == 1
 
         # Specifying the computation
-        a = O.tensor((size_n, size_h + size_r - 1, size_w + size_s - 1, size_c), dtype)
+        a = O.tensor((size_b, size_h + size_r - 1, size_w + size_s - 1, size_c), dtype)
         b = O.tensor((size_r, size_s, size_c, size_f), dtype)
         with O.graph(name="ttile_xdsl_conv2D_graph") as gb:
             O.conv2d(a, b, stride=(dsizes["strx"], dsizes["stry"]), name="Out")
