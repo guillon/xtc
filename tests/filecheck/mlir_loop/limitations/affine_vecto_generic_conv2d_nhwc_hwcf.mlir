@@ -44,5 +44,6 @@ func.func @myfun(
   return
 }
 
+// CHECK:     MLIR Error: NYI: non-trivial layout map
 // CHECK-NOT: vector.transfer_read
 // CHECK-NOT: vector.transfer_write

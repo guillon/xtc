@@ -1,4 +1,4 @@
-// RUN: mlir-loop --vectors-size 8 --no-alias --print-source-ir %s 2>&1 | filecheck %s
+// RUN: mlir-loop --vectors-size 8 --no-alias --print-source-ir --print-transformed-ir %s 2>&1 | filecheck %s
 
 func.func @myfun(
   %I: memref<1x30x30x64xf32>,
@@ -62,6 +62,10 @@ func.func @myfun(
 // CHECK-NEXT:      transform.structured.vectorize %arg0 : !transform.any_op
 // CHECK-NEXT:      transform.yield 
 // CHECK-NEXT:    }
+// CHECK-NEXT:    transform.named_sequence @_super_vectorize(%arg0: !transform.any_op {transform.consumed}) -> !transform.any_op {
+// CHECK-NEXT:      %0 = transform.apply_registered_pass "affine-super-vectorize" to %arg0 {options = "virtual-vector-size=8"} : (!transform.any_op) -> !transform.any_op
+// CHECK-NEXT:      transform.yield %0 : !transform.any_op
+// CHECK-NEXT:    }
 // CHECK-NEXT:    transform.named_sequence @__transform_main(%arg0: !transform.any_op {transform.readonly}) {
 // CHECK-NEXT:      %0 = transform.structured.match attributes {__node0__} in %arg0 : (!transform.any_op) -> !transform.any_op
 // CHECK-NEXT:      %tiled_linalg_op, %loops = transform.structured.tile_using_for %0 tile_sizes [0, 1, 0, 0, 0, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
@@ -87,7 +91,10 @@ func.func @myfun(
 // CHECK-NEXT:      } : !transform.any_op
 // CHECK-NEXT:      %2 = transform.get_parent_op %loops {isolated_from_above} : (!transform.any_op) -> !transform.any_op
 // CHECK-NEXT:      %3 = transform.apply_registered_pass "convert-linalg-to-affine-loops" to %2 : (!transform.any_op) -> !transform.any_op
-// CHECK-NEXT:      %4 = transform.apply_registered_pass "affine-super-vectorize" to %3 {options = "virtual-vector-size=8"} : (!transform.any_op) -> !transform.any_op
+// CHECK-NEXT:      %4 = transform.include @_super_vectorize failures(suppress) (%3) : (!transform.any_op) -> !transform.any_op
 // CHECK-NEXT:      transform.yield 
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
+// CHECK:       MLIR Error: NYI: non-trivial layout map
+// CHECK-NOT: vector.transfer_read
+// CHECK-NOT: vector.transfer_write

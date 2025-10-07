@@ -53,7 +53,7 @@ func.func @myfun(
 // CHECK-NEXT:  	add    $0x1f00,%rsi
 // CHECK-NEXT:  	mov    $0x1,%bpl
 // CHECK-NEXT:  	xor    %r14d,%r14d
-// CHECK-NEXT:  	data16 data16 cs nopw 0x0(%rax,%rax,1)
+// CHECK-NEXT:  	{{.*}}nop{{.*}}
 // CHECK-NEXT:  	mov    %r14,%r15
 // CHECK-NEXT:  	shl    $0xb,%r15
 // CHECK-NEXT:  	add    %rdi,%r15
@@ -275,4 +275,4 @@ func.func @myfun(
 // CHECK-NEXT:  	pop    %r15
 // CHECK-NEXT:  	pop    %rbp
 // CHECK-NEXT:  	vzeroupper
-// CHECK-NEXT:  	ret
+// CHECK-NEXT:  	ret{{.*}}

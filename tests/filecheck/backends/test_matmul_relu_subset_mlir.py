@@ -26,7 +26,7 @@ sched = sch.schedule()
 
 comp = impl.get_compiler(
     shared_lib=True,
-    dump_file="matmul_relu_mlir",
+    dump_file="matmul_relu_subset_mlir",
     print_source_ir=True,
     print_transformed_ir=True,
 )

@@ -4,12 +4,22 @@
 #
 from xdsl.dialects import func as xdslfunc
 from mlir.dialects import func, builtin
-from mlir.ir import ArrayAttr, DictAttr, UnitAttr, Context, Location, InsertionPoint
+from mlir.ir import (
+    ArrayAttr,
+    Diagnostic,
+    DictAttr,
+    UnitAttr,
+    Context,
+    Location,
+    InsertionPoint,
+)
 
 
 class RawMlirProgram:
     def __init__(self, source: str):
         self.ctx = Context()
+        self.ctx.attach_diagnostic_handler(self._diagnostic_handler)
+        self.ctx.emit_error_diagnostics = True  # type: ignore
         self.loc = Location.unknown(self.ctx)
         self.module = builtin.ModuleOp.parse(source, context=self.ctx)
 
@@ -20,6 +30,10 @@ class RawMlirProgram:
     @property
     def mlir_module(self):
         return self.module
+
+    @classmethod
+    def _diagnostic_handler(cls, diag: Diagnostic) -> bool:
+        raise RuntimeError(f"MLIR Error: {diag}")
 
 
 class MlirProgram(RawMlirProgram):
