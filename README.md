@@ -18,20 +18,21 @@ Roadmap:
 
 ## Installation instructions
 
-Ensure installation of minimal required dependencies on the distribution:
+Ensure installation of minimal required dependencies on the distribution (here for deb like distributions):
 
     sudo apt install python3 python3-dev build-essential libomp5 binutils binutils-aarch64-linux-gnu binutils-x86-64-linux-gnu
     sudo apt install libpfm4-dev  # Optionally if using PMU counters on CPU for evaluation
 
-Setup a virtual python environment with python >= 3.10,
-and install base requirements, for instance:
+Ensure python version >=3.10 and <3.13.
+
+Install virtual environment, for instance:
 
     python3 -m venv .venv
     source .venv/bin/activate
 
 Install the package for development/testing with:
 
-    pip install -e .[dev]
+    pip3 install -e '.[dev]'
 
 
 Then install the MLIR requirements and optionally TVM and JIT backend requirements
@@ -45,12 +46,14 @@ configure your system to access counters with: `sudo sysctl kernel.perf_event_pa
 For the MLIR backend, install the python packages for MLIR dependencies
 (maintained at https://gitlab.inria.fr/CORSE/mlir-bindings-wheels and https://gitlab.inria.fr/CORSE/xtc-mlir-bindings-wheels):
 
-    pip install -r mlir_requirements.txt
+    pip3 install -r mlir_requirements.txt
 
 
-Optionally, one can build the MLIR project as follow.
+#### Optional MLIR development version
 
-Ensure revision is earlier then the one specified iin `mlir-requirements.txt`.
+Optionally, for using own MLIR development version, build the MLIR project as follow.
+
+Ensure revision is compatible with the one specified iin `mlir-requirements.txt`.
 
 Then execute, for instance:
 
@@ -69,19 +72,14 @@ Compile MLIR/CLANG and the MLIR python bindings, for instance:
     -DCMAKE_BUILD_TYPE=Release \
     -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
     -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DCMAKE_C_COMPILER=clang \
-    -DCMAKE_CXX_COMPILER=clang++ \
-    -DCMAKE_ASM_COMPILER=clang \
-    -DCMAKE_SHARED_LINKER_FLAGS="-fno-omit-frame-pointer" \
-    -DCMAKE_EXE_LINKER_FLAGS="-fno-omit-frame-pointer" \
     ../llvm
     make -j4
     make install
 
 Add the tools to your `PATH` and the python bindings to your `PYTHONPATH`:
 
-    export PATH=$HOME/install/llvm
-    export PYTHONPATH=$PYTHONPATH:$HOME/install/llvm/python_packages/mlir_core
+    export PATH=$HOME/install/llvm/bin:$PATH
+    export PYTHONPATH=$HOME/install/llvm/python_packages/mlir_core:$PYTHONPATH
 
 Some features of XTC also require an out-of-tree project named XTC-MLIR.
 It is installed automatically using the mlir_requirements.txt file.
@@ -101,7 +99,7 @@ To force the use of a specific target, you can set the env variable XTC_MLIR_TAR
 In order to use the tvm backend, install the python packages for TVM dependencies
 (maintained at https://gitlab.inria.fr/CORSE/tvm-wheels):
 
-    pip install -r tvm_requirements.txt
+    pip3 install -r tvm_requirements.txt
 
 
 Note that, if compiling TVM v0.16+ from source instead of using these packages,
@@ -112,7 +110,7 @@ which fix a race condition in TVM. This patch is included in the python package 
 
 In order to use the jir backend, install the python packages for JIR dependencies:
 
-    pip install -r jir_requirements.txt
+    pip3 install -r jir_requirements.txt
 
 Note that JIR is currently an Inria internal project, in order to get access to the package
 repository, put the following in yout `~/.netrc` file:
@@ -127,11 +125,11 @@ https://gitlab.inria.fr/CORSE/jir for building JIR and dependent tools from sour
 
 ## Test Installation
 
-Validate installation by launching lit tests and pytest tests:
+Validate installation by launching all tests with:
 
-    lit tests/filecheck
-    pytest tests
+    make check
 
+Refer to the Makefile commands in order to launch individually `lit` tests or `pytest` tests.
 
 ## Exploration
 
