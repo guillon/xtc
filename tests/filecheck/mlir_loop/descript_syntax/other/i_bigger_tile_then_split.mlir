@@ -20,4 +20,5 @@ func.func @matmul(%A: memref<256x512xf64>, %B: memref<512x256xf64>, %C: memref<2
 	outs(%C: memref<256x256xf64>)
 	return
 }
-// CHECK:  Current split on axis i of size 64 cannot support tiles of size 65
+// CHECK:      Current split on axis i of size 64
+// CHECK-NEXT: cannot support tiles of size 65

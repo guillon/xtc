@@ -13,4 +13,5 @@ func.func @matmul(%A: memref<256x512xf64>, %B: memref<512x256xf64>, %C: memref<2
  	 	outs(%C: memref<256x256xf64>)
  	 	return
  }
-// CHECK:  Tile sizes should be strictly positive: "k#-1".
+// CHECK: Tile sizes should be strictly positive:
+// CHECK: "k#-1".

@@ -8,12 +8,12 @@ func.func @matmul(%A: memref<256x512xf64>, %B: memref<512x256xf64>, %C: memref<2
       "i",
         "j",
           "k[:128]" = {
-            "i" = {"vectorize"},
+            "i#1" = {"vectorize"},
               "k#8" = {"vectorize"},
                 "j#32" = {"vectorize"}
            },
 	   "k[:]" = {
-             "i",
+             "i#1",
                "k#8" = {"vectorize"},
                  "j#32" = {"vectorize"}
             }
@@ -52,7 +52,7 @@ func.func @matmul(%A: memref<256x512xf64>, %B: memref<512x256xf64>, %C: memref<2
 // CHECK-NEXT:        transform.apply_patterns.vector.lower_contraction
 // CHECK-NEXT:      } : !transform.any_op
 // CHECK-NEXT:      %tiled_linalg_op_2, %loops_3 = transform.structured.tile_using_for %second tile_sizes [1, 0, 0] : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
-// CHECK-NEXT:      transform.annotate %loops_3 "__node0__/k[1]/i" : !transform.any_op
+// CHECK-NEXT:      transform.annotate %loops_3 "__node0__/k[1]/i0" : !transform.any_op
 // CHECK-NEXT:      %2 = transform.get_parent_op %loops_3 {isolated_from_above} : (!transform.any_op) -> !transform.any_op
 // CHECK-NEXT:      transform.include @_vecto failures(suppress) (%tiled_linalg_op_2) : (!transform.any_op) -> ()
 // CHECK-NEXT:      transform.apply_patterns to %2 {
