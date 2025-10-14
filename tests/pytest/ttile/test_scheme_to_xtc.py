@@ -296,6 +296,7 @@ def test_launch_and_measure_scheme_graph_interf_conv_tvm():
 
 	return
 
+#   ... With another data type
 def test_launch_and_measure_scheme_graph_interf_conv_tvm_f64():
 	comp = Computation(Computation_spec.CONV, 8)  # f64
 	machine = laptop_guillaume_machine
@@ -313,7 +314,7 @@ def test_launch_and_measure_scheme_graph_interf_conv_tvm_f64():
 
 	return
 
-
+#   ... With various atoms (including partial tiles and parallelism)
 def test_launch_and_measure_scheme_graph_interf_matmul_partial_parall():
 	comp = Computation(Computation_spec.MATMULT, 4)  # f32
 	machine = laptop_guillaume_machine
@@ -331,3 +332,24 @@ def test_launch_and_measure_scheme_graph_interf_matmul_partial_parall():
 
 	return
 
+#   ... With pmu_counters
+def test_launch_and_measure_scheme_graph_interf_pmu_counters():
+  comp = Computation(Computation_spec.MATMULT, 4)
+  machine = laptop_guillaume_machine
+
+  str_scheme = "[V (J, 16); U (J, 2); U (I, 8); T (K, 1024); T (J, 128); T (I, 32); T (J, 2); T (K, 2)]"
+  scheme = build_scheme_from_str(str_scheme)
+
+  dsizes = { "i" : 256, "j": 8192, "k": 2048 }
+
+  #backend = "mlir"
+  backend = "tvm"
+
+  res = launch_and_measure_scheme_graph_interf(comp, machine, scheme, dsizes, backend,
+    pmu_counters=["cpu_clk_thread_unhalted:thread_p", "l1d.replacement"]) #, l_verbose=[False,False,True])
+
+  assert("cpu_clk_thread_unhalted:thread_p" in res.keys())
+  assert("l1d.replacement" in res.keys())
+  assert("peak_perf" in res.keys())
+
+  return
