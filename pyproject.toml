@@ -76,3 +76,8 @@ exclude_also = [
   "pass",
   "\\.\\.\\.",
 ]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -n1"
+testpaths = ["tests/pytest"]

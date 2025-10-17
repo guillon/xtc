@@ -19,7 +19,7 @@ check-lit-c:
 	env XTC_MLIR_TARGET=c lit -v tests/filecheck/backends tests/filecheck/mlir_loop
 
 check-pytest:
-	scripts/pytest/run_pytest.sh -v tests/pytest
+	scripts/pytest/run_pytest.sh -v
 
 .PHONY: check check-lit check-lit-c check-pytest check-type check-pyright check-mypy
 .SUFFIXES:
