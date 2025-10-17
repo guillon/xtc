@@ -56,7 +56,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:      transform.yield 
 # CHECK-NEXT:    }
 # CHECK-NEXT:    transform.named_sequence @_super_vectorize(%arg0: !transform.any_op {transform.consumed}) -> !transform.any_op {
-# CHECK-NEXT:      %0 = transform.apply_registered_pass "affine-super-vectorize" to %arg0 {options = "virtual-vector-size=16"} : (!transform.any_op) -> !transform.any_op
+# CHECK-NEXT:      %0 = transform.apply_registered_pass "affine-super-vectorize" with options = {"virtual-vector-size" = 16 : i64} to %arg0 : (!transform.any_op) -> !transform.any_op
 # CHECK-NEXT:      transform.yield %0 : !transform.any_op
 # CHECK-NEXT:    }
 # CHECK-NEXT:    transform.named_sequence @__transform_main(%arg0: !transform.any_op {transform.readonly}) {
@@ -106,6 +106,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:      transform.yield 
 # CHECK-NEXT:    }
 # CHECK-NEXT:  }
+# CHECK:       RuntimeError: MLIR Error: NYI: non-trivial layout map
 # CHECK:       // -----// IR Dump After transform //----- //
 # CHECK-NEXT:  #map = affine_map<(d0) -> (d0 * 2)>
 # CHECK-NEXT:  #map1 = affine_map<(d0, d1) -> (d0 * 2 + d1)>

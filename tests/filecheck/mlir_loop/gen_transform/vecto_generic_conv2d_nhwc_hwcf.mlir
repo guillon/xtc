@@ -44,4 +44,4 @@ func.func @myfun(
   return
 }
 
-// CHECK: MLIR Python Diagnostic handler raised exception: RuntimeError: MLIR Error: NYI: non-trivial layout map
+// CHECK: RuntimeError: MLIR Error: NYI: non-trivial layout map

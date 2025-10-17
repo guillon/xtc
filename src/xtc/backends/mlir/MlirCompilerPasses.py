@@ -17,6 +17,7 @@ from mlir.dialects.transform.structured import (
 )
 from mlir.dialects.transform.structured import structured_match
 from mlir.dialects.transform.loop import loop_unroll
+from mlir.dialects.transform import SplitHandleOp
 from mlir.ir import (
     Location,
     InsertionPoint,
@@ -148,7 +149,7 @@ class MlirProgramInsertTransformPass:
                     transform.AnyOpType.get(),
                     self._super_vectorize_sequence.bodyTarget,
                     pass_name="affine-super-vectorize",
-                    options=f"virtual-vector-size={self._vectors_size}",
+                    options={"virtual-vector-size": self._vectors_size},
                 )
                 transform.YieldOp([result])
         with (
@@ -229,10 +230,14 @@ class MlirProgramInsertTransformPass:
             #
             if loop_name in state.next_split_size:
                 dim_to_split = state.loop_dim_by_split[loop_name]
-                split_command = structured.SplitOp(
+                split_handle = structured.SplitOp(
                     target=current_handle,
                     dimension=schedule.dims.index(dim_to_split),
                     chunk_sizes=state.chunk_size(loop_name),
+                )
+                split_command = SplitHandleOp(
+                    results_=[transform.AnyOpType.get(), transform.AnyOpType.get()],
+                    handle=split_handle,
                 )
                 left_loop_op = self._generate_node_tiling(
                     handle=split_command.results[0],
