@@ -12,6 +12,7 @@ import shutil
 from pathlib import Path
 
 from xtc.utils.ext_tools import (
+    get_library_platform_extension,
     mlirtranslate_opts,
     llc_opts,
     opt_opts,
@@ -76,16 +77,12 @@ class MlirLLVMTarget(MlirTarget):
             dump_tmp_dir = Path(dump_file).parent
         dump_base = Path(dump_file).name
 
-        suffix_lib = "so"
-        if sys.platform == "darwin":
-            suffix_lib = "dylib"
-
         dump_tmp_file = f"{dump_tmp_dir}/{dump_base}"
         ir_dump_file = f"{dump_tmp_file}.ir"
         bc_dump_file = f"{dump_tmp_file}.bc"
         obj_dump_file = f"{dump_tmp_file}.o"
         exe_c_file = f"{dump_tmp_file}.main.c"
-        so_dump_file = f"{dump_file}.{suffix_lib}"
+        so_dump_file = f"{dump_file}.{get_library_platform_extension()}"
         exe_dump_file = f"{dump_file}.out"
         src_ir_dump_file = f"{dump_base}.mlir"
         mlir_btrn_dump_file = f"{dump_base}.before_trn.mlir"
@@ -134,10 +131,7 @@ class MlirLLVMTarget(MlirTarget):
             assert shlib_process.returncode == 0
 
             payload_objs = [so_dump_file]
-            if sys.platform == "darwin":
-                payload_path = ["-Wl,-rpath,$ORIGIN"]
-            else:
-                payload_path = ["-Wl,--rpath=${ORIGIN}"]
+            payload_path = ["-Wl,-rpath,$ORIGIN"]
 
         if self._config.executable:
             exe_cmd = [
@@ -240,10 +234,7 @@ class MlirLLVMTarget(MlirTarget):
 
     @property
     def shared_path(self):
-        if sys.platform == "darwin":
-            return [f"-Wl,-rpath,{self._config.mlir_install_dir}/lib/"]
-        else:
-            return [f"-Wl,--rpath={self._config.mlir_install_dir}/lib/"]
+        return [f"-Wl,-rpath,{self._config.mlir_install_dir}/lib/"]
 
     def _save_temp(self, fname: str, content: Any) -> None:
         if not self._config.save_temps:

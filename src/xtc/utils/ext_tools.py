@@ -24,6 +24,13 @@ def get_library_path(libname: str) -> str:
     assert False
 
 
+def get_library_platform_extension():
+    if platform.system() == "Darwin":
+        return "dylib"
+
+    return "so"
+
+
 transform_opts = [
     "transform-interpreter",
 ]
@@ -112,18 +119,12 @@ shared_lib_opts = ["--shared", *cc_opts]
 
 exe_opts = [*cc_opts]
 
-if platform.system() == "Darwin":
-    runtime_libs = [
-        "libmlir_runner_utils.dylib",
-        "libmlir_c_runner_utils.dylib",
-        "libmlir_async_runtime.dylib",
-    ]
-else:
-    runtime_libs = [
-        "libmlir_runner_utils.so",
-        "libmlir_c_runner_utils.so",
-        "libmlir_async_runtime.so",
-    ]
+
+runtime_libs = [
+    f"libmlir_runner_utils.{get_library_platform_extension()}",
+    f"libmlir_c_runner_utils.{get_library_platform_extension()}",
+    f"libmlir_async_runtime.{get_library_platform_extension()}",
+]
 
 system_libs = [get_library_path("omp")]
 

@@ -187,7 +187,7 @@ class PackedOperatorWrapper:
         with tempfile.TemporaryDirectory() as tdir:
             output_c = f"{Path(tdir) / Path(lib_fname).stem}.c"
             self.generate_c(output_c)
-            cmd = f"gcc --shared -fPIC -O2 {output_c} -o {output_so} {packed_lib_name} -Wl,--rpath,$ORIGIN"
+            cmd = f"gcc --shared -fPIC -O2 {output_c} -o {output_so} {packed_lib_name} -Wl,-rpath,$ORIGIN"
             p = subprocess.run(
                 shlex.split(cmd), text=True, capture_output=True, cwd=output_dir
             )

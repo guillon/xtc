@@ -8,7 +8,6 @@ from pathlib import Path
 from copy import deepcopy
 import tempfile
 import subprocess
-import sys
 
 from xdsl.dialects.builtin import ModuleOp, StringAttr
 from jir.environment import get_host_target_triple
@@ -38,6 +37,7 @@ from xtc.utils.tools import (
 )
 from xtc.utils.ext_tools import (
     cc_bin,
+    get_library_platform_extension,
     llc_opts,
     opt_opts,
     runtime_libs,
@@ -172,10 +172,7 @@ class JIRCompiler(itf.comp.Compiler):
         compiled_obj = self._llc_compiler(compiled_bc, pic=self.shared_lib)
 
         compiled_so = self._shlib_compiler(compiled_obj)
-        suffix_lib = "so"
-        if sys.platform == "darwin":
-            suffix_lib = "dylib"
-        library_path = f"{lib_path}.{suffix_lib}"
+        library_path = f"{lib_path}.{get_library_platform_extension()}"
         with open(library_path, "wb") as out:
             out.write(compiled_so)
 
@@ -238,7 +235,7 @@ class JIRCompiler(itf.comp.Compiler):
 
     @property
     def _shared_path(self):
-        return [f"-Wl,--rpath={self.mlir_install_dir}/lib/"]
+        return [f"-Wl,-rpath,{self.mlir_install_dir}/lib/"]
 
     @property
     def _cmd_opt(self):
@@ -345,7 +342,7 @@ class JIRCompiler(itf.comp.Compiler):
             input_obj = f"{tdir}/input.o"
             with open(input_obj, "wb") as outf:
                 outf.write(obj_module)
-            temp_so = f"{tdir}/output.so"
+            temp_so = f"{tdir}/output.{get_library_platform_extension()}"
             shlib_cmd = [
                 *self._cmd_cc,
                 *shared_lib_opts,
