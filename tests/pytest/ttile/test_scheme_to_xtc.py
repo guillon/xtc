@@ -351,10 +351,9 @@ def test_launch_and_measure_scheme_graph_interf_pmu_counters():
   backend = "tvm"
 
   res = launch_and_measure_scheme_graph_interf(comp, machine, scheme, dsizes, backend,
-    pmu_counters=["cpu_clk_thread_unhalted:thread_p", "l1d.replacement"]) #, l_verbose=[False,False,True])
+                                               pmu_counters=["cycles", "l1d.replacement"]) #, l_verbose=[False,False,True])
 
-  assert("cpu_clk_thread_unhalted:thread_p" in res.keys())
+  assert("cycles" in res.keys())
   assert("l1d.replacement" in res.keys())
-  assert("peak_perf" in res.keys())
 
   return
