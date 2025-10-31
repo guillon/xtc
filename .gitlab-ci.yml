@@ -21,6 +21,48 @@ variables:
   PYPI_REPOSITORY_URL: $CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/pypi
 
 
+.test-minimal-common: &test-minimal-common
+  script:
+    - apt-get update
+    - apt-get install -y build-essential libomp5
+    - pip3 install -e .[dev]
+    - pip3 install -r mlir_requirements.txt
+    - pip3 install -r tvm_requirements.txt
+    - make check-pyright
+    - make test
+
+test-minimal-py310:
+  image: python:3.10
+  stage: test
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "main"
+    - if: $CI_COMMIT_TAG =~ /^xtc-v/
+  <<: *test-minimal-common
+
+test-minimal-py311:
+  image: python:3.11
+  stage: test
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "main"
+    - if: $CI_COMMIT_TAG =~ /^xtc-v/
+  <<: *test-minimal-common
+
+test-minimal-py313:
+  image: python:3.13
+  stage: test
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "main"
+    - if: $CI_COMMIT_TAG =~ /^xtc-v/
+  <<: *test-minimal-common
+
+test-minimal-py314:
+  image: python:3.14
+  stage: test
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "main"
+    - if: $CI_COMMIT_TAG =~ /^xtc-v/
+  <<: *test-minimal-common
+
 test-xtc:
   stage: test
   rules:
