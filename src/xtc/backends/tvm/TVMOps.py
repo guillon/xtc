@@ -56,7 +56,7 @@ def get_tvm_native_target_options() -> str:
     if cpu:
         target_options.append(f"-mcpu={cpu}")
     if attrs:
-        target_options.append(f"-mattrs={attrs}")
+        target_options.append(f"-mattr={attrs}")
     return " ".join(target_options)
 
 
