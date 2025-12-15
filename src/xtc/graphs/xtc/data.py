@@ -162,5 +162,5 @@ class XTCTensor(Tensor):
                     f"{' '.join([f'{d:g}' for d in data[-4:]])}"
                 )
             else:
-                data_str = f"{' '.join(['f{d:g}' for d in data])}"
+                data_str = f"{' '.join([f'{d:g}' for d in data])}"
             return f"Tensor(type={self._type}, data={data_str})"
