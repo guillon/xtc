@@ -3,7 +3,7 @@ set -euo pipefail
 
 outdir="${1-.}"
 BACKENDS="${BACKENDS:-mlir tvm jir}"
-OPTS="1 2 3"
+OPTS="${OPTS:-1 2 3}"
 STRATEGIES="${STRATEGIES:-" \
           "tile3d " \
           "tile4d tile4dv " \

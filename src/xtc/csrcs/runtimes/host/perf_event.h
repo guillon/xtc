@@ -26,6 +26,7 @@ typedef struct {
 } perf_event_type_event_t;
 
 typedef enum {
+    PERF_ARG_INVALID = -1,
     PERF_ARG_GENERIC,
     PERF_ARG_PTR
 } perf_event_arg_mode_t;

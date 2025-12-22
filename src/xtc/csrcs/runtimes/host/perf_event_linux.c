@@ -62,11 +62,6 @@ static int sys_perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
                                int cpu, int group_fd, unsigned long flags) {
   long fd;
   fd = syscall(SYS_perf_event_open, hw_event, pid, cpu, group_fd, flags);
-  if (fd < 0) {
-    perror("sys_perf_event_open failure");
-    exit(EXIT_FAILURE);
-  }
-  assert(fd >= 0);
   return (int)fd;
 }
 
@@ -83,7 +78,9 @@ static void init_perf_event_attr(struct perf_event_attr *attr_ptr)
 
 
 int open_perf_event(perf_event_args_t event) {
-  if (event.mode == PERF_ARG_GENERIC) {
+  if (event.mode == PERF_ARG_INVALID) {
+      return -1;
+  } else if (event.mode == PERF_ARG_GENERIC) {
     struct perf_event_attr attr;
     init_perf_event_attr(&attr);
     attr.type = event.args.config_pair.type;
@@ -129,7 +126,6 @@ void open_perf_events(int n_events, const perf_event_args_t *events, int *fds) {
   assert(n_events <= PERF_EVENT_MAX_EVENTS);
   for (int i = 0; i < n_events; i++) {
     fds[i] = open_perf_event(events[i]);
-    assert(fds[i] != -1);
   }
 }
 
@@ -190,15 +186,17 @@ int get_perf_event_config(const char *name, perf_event_args_t *event) {
 
   int ret = pfm_get_os_event_encoding(name, PFM_PLM3, PFM_OS_PERF_EVENT, arg);
 
-  if (ret != PFM_SUCCESS) {
-    return 1;
+  if (ret == PFM_SUCCESS) {
+    event->mode = PERF_ARG_PTR;
+    event->args.config_ptr = (const void *)arg;
+    return 0;
   }
-
-  event->mode = PERF_ARG_PTR;
-  event->args.config_ptr = (const void *)arg;
+  free(arg);
+  free(attr);
   #endif /* HAS_PFM */
 
-  return 0;
+  event->mode = PERF_ARG_INVALID;
+  return 1;
 }
 
 void perf_event_args_destroy(perf_event_args_t args) {

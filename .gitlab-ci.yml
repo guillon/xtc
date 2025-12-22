@@ -1,12 +1,9 @@
 default:
   image: python:3.12
   tags:
-     # For now ci.inria.fr machine have issue compiling avx2/avx512
-     # Use pinocchio as a runner
-     - pinocchio.inrialpes.fr
-#    # Allocate medium shared (2xCPU 4GB)
-#    - ci.inria.fr
-#    - medium
+    # Allocate large shared (4xCPU 8GB)
+    - ci.inria.fr
+    - large
   before_script:
     - df -h .
     - free -h
@@ -92,9 +89,9 @@ test-xtc:
     - coverage xml -o artifacts/coverage/coverage.xml
     - coverage report --format=markdown >artifacts/coverage/coverage.md
     - coverage html -d artifacts/coverage/html
-    - scripts/explore/run-explore-one-shot.sh artifacts/explore/
+    - env STRATEGIES=tile8dvr OPTS=3 scripts/explore/run-explore-one-shot.sh artifacts/explore/
     - env NOSHOW=1 scripts/explore/display-explore-one-shot.sh artifacts/explore/
-    - scripts/explore/run-explore-variants.sh artifacts/explore/
+    - env STRATEGIES=tile8dvr TRIALS=16 scripts/explore/run-explore-variants.sh artifacts/explore/
     - env NOSHOW=1 scripts/explore/display-explore-variants.sh artifacts/explore/
   coverage:  '/^TOTAL.* (\d+\%)$/'
   artifacts:

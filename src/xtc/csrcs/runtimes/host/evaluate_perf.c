@@ -45,8 +45,7 @@ typedef int (*packed_func_t)(PackedArg *, int *, int, PackedArg *, int *);
     events = alloca(events_num*sizeof(*events));                        \
     values = alloca(events_num*sizeof(*values));                        \
     for(int e = 0; e < events_num; e++) {                               \
-      int ret = get_perf_event_config(events_names[e], &events[e]);     \
-      assert(ret == 0);                                                 \
+      get_perf_event_config(events_names[e], &events[e]);               \
     }                                                                   \
   }                                                                     \
   open_perf_events(events_num, events, perf_fds);                       \
@@ -75,7 +74,10 @@ typedef int (*packed_func_t)(PackedArg *, int *, int, PackedArg *, int *);
     }                                                                   \
     if (events_num > 0) {                                               \
       for (int e = 0; e < events_num; e++) {                            \
-        results[r*events_num+e] = ((double)values[e]) / attempts;       \
+        if (perf_fds[e] == -1)                                          \
+          results[r*events_num+e] = -1;                                 \
+        else                                                            \
+          results[r*events_num+e] = ((double)values[e]) / attempts;     \
       }                                                                 \
     } else {                                                            \
       results[r] = elapsed / attempts;                                  \
