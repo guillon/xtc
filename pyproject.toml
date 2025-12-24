@@ -20,6 +20,7 @@ dev = [
     "pytest-xdist",
     "pyright==1.1.407",
     "marimo==0.14.16",
+    "ruff==0.14.10",
 ]
 
 [tool.setuptools]
