@@ -15,10 +15,13 @@ test:
 
 check: check-format check-type check-lit-all check-pytest
 
-check-format: check-format-ruff
+check-format: check-format-ruff check-license
 
 check-format-ruff:
 	ruff format --check
+
+check-license:
+	scripts/licensing/licensing.py --check
 
 check-type: check-pyright check-mypy
 
@@ -41,5 +44,5 @@ check-lit-c:
 check-pytest:
 	scripts/pytest/run_pytest.sh -v
 
-.PHONY: help test check check-lit-all check-lit check-lit-c check-pytest check-type check-pyright check-mypy check-format check-format-ruff
+.PHONY: help test check check-lit-all check-lit check-lit-c check-pytest check-type check-pyright check-mypy check-format check-format-ruff check-license
 .SUFFIXES:
