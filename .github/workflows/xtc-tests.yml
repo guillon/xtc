@@ -9,6 +9,10 @@ jobs:
         python-version: ["3.12"]
     steps:
       - uses: actions/checkout@v5
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: build-essential libomp5 binutils-aarch64-linux-gnu binutils-x86-64-linux-gnu libpfm4-dev
+          version: 1.0
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -30,3 +34,6 @@ jobs:
       - name: List packages
         run: |
           pip list
+      - name: Check
+        run: |
+          make check
