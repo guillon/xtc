@@ -63,7 +63,7 @@ typedef int (*packed_func_t)(PackedArg *, int *, int, PackedArg *, int *);
 #define define_evaluateN(FUNC, ...)                                     \
 {                                                                       \
   assert(repeat > 0);                                                   \
-  assert(number > 0);                                                   \
+  assert(number >= 0);                                                  \
   assert(min_repeat_ms >= 0);                                           \
                                                                         \
   int fd = -1;                                                          \
@@ -80,9 +80,13 @@ typedef int (*packed_func_t)(PackedArg *, int *, int, PackedArg *, int *);
   }                                                                     \
   OPEN_PERF_EVENTS(events_num, events, perf_fds);                       \
                                                                         \
-  mem_barrier();                                                        \
-  (void)func(__VA_ARGS__);                                              \
-  mem_barrier();                                                        \
+  if (number > 0) {                                                     \
+    mem_barrier();                                                      \
+    (void)func(__VA_ARGS__);                                            \
+    mem_barrier();                                                      \
+  } else {                                                              \
+    number = 1;                                                         \
+  }                                                                     \
                                                                         \
   ENABLE_PERF_EVENTS(events_num, perf_fds);                             \
   for (int r = 0; r < repeat; r++) {                                    \
