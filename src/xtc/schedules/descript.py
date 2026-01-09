@@ -69,56 +69,13 @@ class LoopNestSlice:
                 last_start = start
         return splits_to_sizes
 
-    def check(self):
-        self._check_unrolling_tiling()
-        self._check_tile_parameter_domain()
-        self._check_unroll_parameter_domain()
-
-    def _check_unroll_parameter_domain(self):
-        """Procedure that check if the unroll parameters domains are correct
-        An unroll parameter should be strictly positive"""
-        for axis, param in self.unroll.items():
-            if param is not None and param <= 0:
-                raise Exception(
-                    f"""
-                    Unroll parameter should be strictly positive:
-                    \"{axis}\" = {{\"unroll\" = {param}}}.
-                    """
-                )
-
-    def _check_tile_parameter_domain(self):
-        """Procedure that check if the tiles parameters domains are correct
-        An tile parameter should be strictly positive"""
-        for axis, tile in self.tiles.items():
-            for param in tile.values():
-                if param <= 0:
-                    raise Exception(
-                        f"""
-                        Tile sizes should be strictly positive:
-                        \"{axis}#{param}\".
-                        """
-                    )
-
-    def _check_unrolling_tiling(self) -> None:
-        """Procedure that check if an unrolled axis fits in the tile"""
-
-        for subaxis in self.tiles.values():
-            for subaxis_name, tile_size in subaxis.items():
-                # if the axis is unrolled and tiled and the unroll factor is
-                # greater than the tile size
-                if (
-                    subaxis_name in self.unroll
-                    and self.unroll[subaxis_name] is not None
-                    and tile_size > 1
-                    and self.unroll[subaxis_name] > tile_size
-                ):
-                    times = self.unroll[subaxis_name]
-                    raise Exception(
-                        f"""
-                        {subaxis_name} cannot be unrolled {times} times
-                        on a tile of size {tile_size}
-                        """
-                    )
+    @property
+    def tiles_to_sizes(self) -> dict[str, int]:
+        tiles_to_sizes: dict[str, int] = {}
+        for tiles in self.tiles.values():
+            for loop, size in tiles.items():
+                tiles_to_sizes[loop] = size
+        return tiles_to_sizes
 
 
 @dataclass
@@ -140,14 +97,12 @@ class LoopNest:
         self._check_vectorization_consistency()
         self._check_tiling_consistency()
         self._check_sizes()
-        for s in self.slices:
-            s.check()
 
     def _check_use_defined_dims(self):
         mapper = LoopsDimsMapper.build_from_slices(self.slices)
         for dim in self.abstract_dims:
             if dim not in mapper.dims:
-                raise Exception(f"{dim} defined but never used")
+                raise RuntimeError(f"{dim} defined but never used")
 
     def _check_vectorization_consistency(self):
         for sched in self.slices:
@@ -156,7 +111,7 @@ class LoopNest:
                 if loop_name in sched.vectorize:
                     vect_above = True
                 elif vect_above:
-                    raise Exception(
+                    raise RuntimeError(
                         f"Inner loop {loop_name} isn't vectorized but an outer one is."
                     )
 
@@ -169,10 +124,11 @@ class LoopNest:
                     seen_axes[loop_name] = None
                 elif loop_name in mapper.tiles_to_axis:
                     axis = mapper.tiles_to_axis[loop_name]
+                    size = sched.tiles_to_sizes[loop_name]
                     if axis not in seen_axes:
-                        raise Exception(
+                        raise RuntimeError(
                             f"""
-                            Axis '{axis}' must be defined before tiling can produce loop '{loop_name}'.
+                            `{axis}#{size}`: {axis} has not been materialized yet.
                             """
                         )
                     seen_axes[axis] = sched.tiles[axis][loop_name]
@@ -221,7 +177,7 @@ class LoopNest:
     ):
         old_size = current_sizes[axis]
         if old_size is not None and new_size > old_size:
-            raise Exception(
+            raise RuntimeError(
                 f"""
                 Inner loop {loop_name} on axis {axis} must be smaller than outer loop.
                 """
@@ -316,8 +272,13 @@ class Descript:
                 try:
                     loop_size = int(tile_size)
                 except:
-                    raise Exception(
-                        f"Invalid tile size: '{tile_size}' in {declaration}"
+                    raise RuntimeError(
+                        f"`{declaration}`: {tile_size} is not an integer."
+                    )
+
+                if loop_size <= 0:
+                    raise RuntimeError(
+                        f"`{declaration}`: tile sizes should be strictly positive."
                     )
 
                 tile_num = len(sched.tiles[axis_name])
@@ -328,7 +289,7 @@ class Descript:
 
             elif declaration in self.abstract_axis:
                 if declaration in interchange:
-                    raise Exception(
+                    raise RuntimeError(
                         f"""
                         Axis {declaration} is scheduled twice (or more).
                         """
@@ -347,26 +308,23 @@ class Descript:
         # Any other value means the split is let in a partial state.
         for axis, cut in previous_cut.items():
             if cut is not None and cut != 0:
-                raise Exception(
-                    f"Splitting on axis {axis} should end but stops at {cut}"
-                )
+                raise RuntimeError(f"Splitting of {axis} unachieved (stops at {cut}).")
 
         sched.interchange = interchange
         return recursive_scheds
 
     def _check_splitting_intervals(
         self,
-        declaration: str,
+        decl: str,
         axis_name: str,
         cut: int | None,
         x: int | None,
         y: int | None,
     ):
         if cut is None:
-            raise Exception(
+            raise RuntimeError(
                 f"""
-                {declaration} is defined on an already covered axis.
-                This might be caused by a missing endpoint: {axis_name}
+                {decl}: {axis_name} already covered.
                 """
             )
 
@@ -374,32 +332,29 @@ class Descript:
         assert isinstance(x, int)
 
         if x > cut:
-            raise Exception(
+            raise RuntimeError(
                 f"""
-                Splitting doesn't cover the whole axis
-                (jumps from {cut} to {x} on axis {axis_name})
+                {decl}: splitting doesn't fully cover {axis_name} (jumps from {cut} to {x}).
                 """
             )
         elif x < cut:
-            raise Exception(
+            raise RuntimeError(
                 f"""
-                Splitting are overlapping on axis {axis_name}
-                (covered until {cut} but restart at {x})
+                {decl}: the segment begins at {x} but the previous one ends at {cut}.
                 """
             )
 
         assert x is not None
 
         if y is not None and x >= y:
-            raise Exception(
+            raise RuntimeError(
                 f"""
-                Starting point in the splitting cannot be greater or equal to
-                the ending point in: {declaration}
+                {decl}: the ending point should be greater than the starting point.
                 """
             )
 
     def _unknown_axis_error(self, axis: str):
-        raise Exception(
+        raise RuntimeError(
             f"""
             Axis {axis} is not a defined axis (defined axis: {self.abstract_axis}).
             """
@@ -421,39 +376,55 @@ def annotate(
         assert isinstance(param, int | None)
         match instr:
             case "unroll":
+                hd = f'`{{"unroll" = {param}}}`'
                 if param is None and loop_name not in sizes:
-                    raise Exception(
+                    raise RuntimeError(
                         f"""
-                        {loop_name} cannot be implicitly fully unrolled if its
-                        size is unknown (needs an unroll factor)
+                        {hd}: {loop_name}'s size being unknown, an unroll factor is needed.
+                        """
+                    )
+                elif param is not None and param <= 0:
+                    raise RuntimeError(
+                        f"""
+                        {hd}: unroll parameter should be strictly positive.
+                        """
+                    )
+                elif param and loop_name in sizes and sizes[loop_name] < param:
+                    raise RuntimeError(
+                        f"""
+                        {hd}: unroll factor should be smaller than {sizes[loop_name]}.
                         """
                     )
                 sched.unroll[loop_name] = sizes[loop_name] if param is None else param
 
             case "vectorize":
                 if param is not None:
-                    raise Exception(
-                        f"Vectorize should not have a parameter (Feature not implemented)"
+                    raise RuntimeError(
+                        f"""
+                        `{{\"vectorize\" = {param}}}`: parameterized vectorization not implemented.
+                        """
                     )
                 sched.vectorize.append(loop_name)
 
             case "parallelize":
                 if param is not None:
-                    raise Exception(
-                        f"Parallelize should not have a parameter (Feature not implemented)"
+                    raise RuntimeError(
+                        f"""
+                        `{{\"parallelize\" = {param}}}`: parameterized parallelization not implemented.
+                        """
                     )
 
                 sched.parallelize.append(loop_name)
 
             case _:
-                raise Exception(f"Unknown annotation on {loop_name}: {instr}")
+                raise RuntimeError(f"Unknown annotation on {loop_name}: {instr}")
 
 
 def parse_split_declaration(declaration: str) -> Tuple[str, int | None, int | None]:
     pattern = r"^(.*)\[(?:(-\d+|\d*)?):(?:(-\d+|\d*)?)\]$"
     match = re.match(pattern, declaration)
     if not match:
-        raise Exception(f"Wrong format {declaration}")
+        raise RuntimeError(f"Wrong format {declaration}")
 
     prefix, x_str, y_str = match.groups()
     x = int(x_str) if x_str else None

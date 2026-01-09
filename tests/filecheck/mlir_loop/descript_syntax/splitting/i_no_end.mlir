@@ -14,4 +14,4 @@ func.func @matmul(%A: memref<256x512xf64>, %B: memref<512x256xf64>, %C: memref<2
 	return
 }
 
-// CHECK:  Splitting on axis j should end but stops at 10
+// CHECK: Splitting of j unachieved (stops at 10).

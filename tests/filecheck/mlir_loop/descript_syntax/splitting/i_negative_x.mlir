@@ -14,5 +14,4 @@ func.func @matmul(%A: memref<256x512xf64>, %B: memref<512x256xf64>, %C: memref<2
 	outs(%C: memref<256x256xf64>)
 	return
 }
-// CHECK: Splitting are overlapping on axis j
-// CHECK: (covered until 0 but restart at -1)
+// CHECK: j[-1:]: the segment begins at -1 but the previous one ends at 0.

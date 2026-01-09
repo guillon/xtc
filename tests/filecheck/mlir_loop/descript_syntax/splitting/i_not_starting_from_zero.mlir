@@ -19,6 +19,4 @@ func.func @matmul(%A: memref<256x512xf64>, %B: memref<512x256xf64>, %C: memref<2
 	return
 }
 
-
-// CHECK: Splitting doesn't cover the whole axis
-// CHECK: (jumps from 0 to 7 on axis j)
+// CHECK: j[7:10]: splitting doesn't fully cover j (jumps from 0 to 7).
