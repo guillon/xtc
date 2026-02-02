@@ -173,6 +173,7 @@ class MlirScheduler(itf.schd.Scheduler):
         self, axis: str, input_idx: int, root: str = DEFAULT_ROOT
     ) -> None:
         # TODO: not implemented for now
+        self._current_scheduler.fuse_producer_at(axis, input_idx, root=root)
         pass
 
     @override

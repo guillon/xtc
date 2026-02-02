@@ -31,6 +31,7 @@ class MlirNodeSchedule:
     processor_mesh: dict[str, int]
     distribution: dict[str, str]
     distributed_buffers: dict[str, dict]
+    fused: list[tuple[str, int]]
 
     def index_of_dim(self, dim: str) -> int:
         return list(self.dims).index(dim)
@@ -91,6 +92,7 @@ class MlirNodeScheduler:
         self.processor_mesh: dict[str, int] = {}
         self.distribution: dict[str, str] = {}
         self.distributed_buffers: dict[str, dict] = {}
+        self.fused: list[tuple[str, int]] = []
 
     def mlir_node_schedule(self) -> MlirNodeSchedule:
         if not self.permutation:
@@ -112,6 +114,7 @@ class MlirNodeScheduler:
             processor_mesh=self.processor_mesh,
             distribution=self.distribution,
             distributed_buffers=self.distributed_buffers,
+            fused=self.fused,
         )
 
     @override
@@ -217,3 +220,8 @@ class MlirNodeScheduler:
             "input_idx": input_idx,
             "memory_axes": memory_axes,
         }
+
+    def fuse_producer_at(
+        self, axis: str, input_idx: int, root: str = DEFAULT_ROOT
+    ) -> None:
+        self.fused.append((axis, input_idx))

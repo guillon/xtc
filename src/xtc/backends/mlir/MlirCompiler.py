@@ -165,7 +165,8 @@ class MlirProgramCompiler:
             self.dump_ir("IR Dump After transform")
 
     def mlir_apply_tensor_lowering_pass(self) -> None:
-        apply_bufferization_passes(self._mlir_program)
+        assert self._config.mlir_install_dir
+        apply_bufferization_passes(self._mlir_program, self._config.mlir_install_dir)
         # apply the post-bufferization transform sequence
         if self.using_tensors:
             apply_transform_pass = MlirProgramApplyTransformPass(

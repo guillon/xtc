@@ -680,9 +680,9 @@ class MlirOperatorPad(MlirOperator):
                         in_bounds_checks.append(ge_zero)
                         in_bounds_checks.append(lt_size)
 
-                    all_in_bounds = in_bounds_checks[0]
+                    all_in_bounds: arith.CmpiOp | arith.AndIOp = in_bounds_checks[0]
                     for check in in_bounds_checks[1:]:
-                        all_in_bounds = arith.AndIOp(all_in_bounds, check)  # type: ignore
+                        all_in_bounds = arith.AndIOp(all_in_bounds, check)
 
                     if_region_then = Region([Block(arg_types=[])])
                     if_region_else = Region([Block(arg_types=[])])
@@ -742,7 +742,7 @@ class MlirOperatorPad(MlirOperator):
             },
             "dims_sizes": [
                 self.dims_sizes(),
-                *([] if using_tensors else [self.dims_sizes()]),
+                *([] if False and using_tensors else [self.dims_sizes()]),
             ],
             "output_nodes": [copy],
         }
