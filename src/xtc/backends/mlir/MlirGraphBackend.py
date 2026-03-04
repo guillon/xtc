@@ -89,6 +89,7 @@ class MlirGraphBackend(MlirBackend):
                         dynamic_sizes=[],
                         tensor_type=self._xdsl_type_from_tensortype(type),
                     ).results[0]
+            # allocate any unallocated memrefs
             if name in variables:
                 continue
             assert self.xdsl_type != TensorType
@@ -102,7 +103,7 @@ class MlirGraphBackend(MlirBackend):
             variables[name] = alloca.results[0]
         args = [variables[name] for name in names]
         _, attrs = operation.generate(block=block, args=args)
-        # the tensor dialect needs the result of the op, not the alloca
+        # the tensor dialect needs the result of the op
         if self.xdsl_type == TensorType:
             assert len(node.outputs) == len(attrs["output_nodes"])
             for name, output in zip(node.outputs, attrs["output_nodes"]):

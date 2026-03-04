@@ -156,11 +156,7 @@ class MlirProgramCompiler:
             self.dump_ir("IR Dump After transform")
 
     def mlir_apply_tensor_lowering_pass(self) -> None:
-        if self._config.print_bufferization_ir:
-            self.dump_ir("IR Dump Before Tensor Lowering")
-
         apply_bufferization_passes(self._mlir_program)
-
         if self._config.print_bufferization_ir:
             self.dump_ir("IR Dump After Tensor Lowering")
 
@@ -204,6 +200,7 @@ class MlirProgramCompiler:
         src_ir_dump_file = f"{dump_base}.mlir"
         mlir_btrn_dump_file = f"{dump_base}.before_trn.mlir"
         mlir_atrn_dump_file = f"{dump_base}.after_trn.mlir"
+        mlir_tlwr_dump_file = f"{dump_base}.bufferized.mlir"
 
         save_temp(src_ir_dump_file, self._mlir_program.mlir_module)
 
@@ -214,5 +211,6 @@ class MlirProgramCompiler:
         save_temp(mlir_atrn_dump_file, self._mlir_program.mlir_module)
 
         self.mlir_apply_tensor_lowering_pass()
+        save_temp(mlir_tlwr_dump_file, self._mlir_program.mlir_module)
 
         self._target.generate_code_for_target(self._mlir_program, dump_file=dump_file)
