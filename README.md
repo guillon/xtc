@@ -142,6 +142,7 @@ The performance counters can be accessed is the GPU has a compute capability >=7
 - `mlir-backend` - MLIR backend wrapper
 - `loop-explore` - Autotuning and space exploration
 - `loop-display` - Visualization of exploration results
+- `xtc-export-model-explorer` - Export XTC graphs to model-explorer JSON
 
 ## AI assistants
 
