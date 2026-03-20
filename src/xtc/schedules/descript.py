@@ -132,7 +132,7 @@ class ScheduleInterpreter:
             a, b = str(a), str(b)
             for c in node.constraints:
                 node.constraints.remove(c)
-                node.constraints.add(c.replace(a, b))
+                node.constraints.append(c.replace(a, b))
 
         # Check that all splits are complete
         for axis, cut in previous_cut.items():
@@ -207,10 +207,10 @@ class ScheduleInterpreter:
                     .replace(_SPLIT_RIGHT, "_")
                     .replace(_NODE_SEP, "")
                 )
-                node.constraints.add(f"{inner_size} <= {y}")
+                node.constraints.append(f"{inner_size} <= {y}")
                 if isinstance(x, str):
-                    node.constraints.add(f"{x} <= {y}")
-                node.constraints.add(f"{inner_size} + {x} == {y}")
+                    node.constraints.append(f"{x} <= {y}")
+                node.constraints.append(f"{inner_size} + {x} == {y}")
         else:
             inner_size = z
             x = cut
@@ -222,11 +222,11 @@ class ScheduleInterpreter:
             if isinstance(z, int) and isinstance(x, int):
                 previous_cut[axis_name] = x + z
                 if not isinstance(y, int):
-                    node.constraints.add(f"{z + x} <= {y}")
+                    node.constraints.append(f"{z + x} <= {y}")
             elif isinstance(x, int) and x == 0:
                 previous_cut[axis_name] = z
                 if not isinstance(y, int):
-                    node.constraints.add(f"{z} <= {y}")
+                    node.constraints.append(f"{z} <= {y}")
             else:
                 new_cut = root[1:] + new_dim_name
                 new_cut = (
@@ -237,9 +237,9 @@ class ScheduleInterpreter:
                 previous_cut[axis_name] = new_cut
                 if len(last_split) > 0:
                     a, b = last_split[0]
-                    node.constraints.add(f"{a} <= {b}")
+                    node.constraints.append(f"{a} <= {b}")
                 last_split.append((new_cut, y))
-                node.constraints.add(f"{z} + {x} == {new_cut}")
+                node.constraints.append(f"{z} + {x} == {new_cut}")
 
         # Create a child node for the nested schedule
         child_node = ParameterLoopNestNode(
@@ -249,18 +249,12 @@ class ScheduleInterpreter:
         )
         node.add_child(child_node)
 
-        # recursive_axes: dict[str, list[literal]] = {
-        #     a: v.copy() for a, v in axes.items() if a != axis_name
-        # }
-        # recursive_axes[axis_name] = [inner_size]
-
         # Recursively interpret the nested schedule into the child node
         self._interpret_spec_into_node(
             spec=item.body,
             node=child_node,
             root=new_root_name,
             head=[axis_name],
-            # axes=recursive_axes,
             axes=deepcopy(axes),
         )
 
@@ -297,7 +291,7 @@ class ScheduleInterpreter:
                         f"`{item}`: {item.size} is a partial tile, but its range cannot be computed."
                     )
                 old_size = list_axis[-1]
-                node.constraints.add(f"{item.size} <= {old_size}")
+                node.constraints.append(f"{item.size} <= {old_size}")
             else:
                 if not self.abstract_dim_sizes:
                     raise ScheduleInterpretError(
@@ -309,7 +303,7 @@ class ScheduleInterpreter:
                     else str(list_axis[0])
                 )
                 s = f"{item.size} || {{{s}}}"
-                node.constraints.add(s)
+                node.constraints.append(s)
         list_axis.append(item.size)
 
         return loop_name
@@ -365,22 +359,22 @@ class ScheduleInterpreter:
                 )
             elif isinstance(unroll_factor, str):
                 if self.partial_unrolls:
-                    node.constraints.add(f"{unroll_factor} <= {sizes[loop_name]}")
+                    node.constraints.append(f"{unroll_factor} <= {sizes[loop_name]}")
                 else:
-                    node.constraints.add(f"{unroll_factor} || {sizes[loop_name]}")
+                    node.constraints.append(f"{unroll_factor} || {sizes[loop_name]}")
             node.unroll[loop_name] = unroll_factor
 
         if annotations.vectorize:
             if isinstance(annotations.vectorize, str):
                 node.vectorize_parameters[loop_name] = annotations.vectorize
-                node.constraints.add(f"{annotations.vectorize} in {{0, 1}}")
+                node.constraints.append(f"{annotations.vectorize} in {{0, 1}}")
             else:
                 node.vectorize.append(loop_name)
 
         if annotations.parallelize:
             if isinstance(annotations.parallelize, str):
                 node.parallelize_parameters[loop_name] = annotations.parallelize
-                node.constraints.add(f"{annotations.parallelize} in {{0, 1}}")
+                node.constraints.append(f"{annotations.parallelize} in {{0, 1}}")
             else:
                 node.parallelize.append(loop_name)
 
@@ -447,7 +441,8 @@ class Descript:
     This class coordinates the parsing, interpretation, and application
     of schedule specifications. The flow is:
     1. Parse: dict -> ScheduleSpec (AST)
-    2. Interpret: ScheduleSpec -> LoopNest
+    2. Interpret: ScheduleSpec -> ParameterLoopNest
+    2.5. Instantiate: ParameterLoopNest -> LoopNest
     3. Validate: LoopNest.check()
     4. Apply: LoopNest -> Scheduler
     """
@@ -478,15 +473,19 @@ class Descript:
         return interpreter.interpret(ast, root=node_name)
 
     def apply_sample(
-        self, loop_nest: ParameterLoopNest, sample: dict[str, int], scheduler: Scheduler
+        self,
+        loop_nest: ParameterLoopNest | LoopNest,
+        sample: dict[str, int],
+        scheduler: Scheduler,
     ):
-        # Apply the sample
-        loop_nest_ = loop_nest.apply_sample(sample)
+        if isinstance(loop_nest, ParameterLoopNest):
+            # Apply the sample
+            loop_nest = loop_nest.apply_sample(sample)
 
         # Validate the loop nest
-        loop_nest_.check()
+        loop_nest.check()
         # Apply the schedule to the scheduler
-        self._apply_loop_nest(loop_nest_, scheduler)
+        self._apply_loop_nest(loop_nest, scheduler)
 
     def apply(
         self,
@@ -500,38 +499,15 @@ class Descript:
         Args:
             node_name: The name of the root node to schedule.
             spec: The schedule specification as a nested dict.
+            scheduler: The scheduler on which the schedule is applied.
 
         Raises:
             ScheduleParseError: If the spec cannot be parsed.
             ScheduleInterpretError: If the spec cannot be interpreted.
             ScheduleValidationError: If the resulting schedule is invalid.
         """
-        # Parse a YAML specification into a dict
-        if isinstance(spec, str):
-            yaml_parser = YAMLParser()
-            spec = yaml_parser.parse(spec)
-
-        # Parse the specification into an AST
-        parser = ScheduleParser()
-        ast = parser.parse(spec)
-
-        # Interpret the AST into a LoopNest
-        interpreter = ScheduleInterpreter(
-            abstract_dims=self.abstract_dims,
-            abstract_dim_sizes=self.abstract_dim_sizes,
-            abstract_matrix=self.abstract_matrix,
-            partial_tiles=self.partial_tiles,
-            partial_unrolls=self.partial_unrolls,
-        )
-        loop_nest = interpreter.interpret(ast, root=node_name)
-
-        # Apply the sample
-        loop_nest = loop_nest.apply_sample(sample)
-
-        # Validate the loop nest
-        loop_nest.check()
-        # Apply the schedule to the scheduler
-        self._apply_loop_nest(loop_nest, scheduler)
+        loop_nest = self.loop_nest(node_name, spec)
+        self.apply_sample(loop_nest, sample, scheduler)
 
     def _apply_loop_nest(self, loop_nest: LoopNest, scheduler: Scheduler) -> None:
         """Apply a LoopNest to the scheduler."""
