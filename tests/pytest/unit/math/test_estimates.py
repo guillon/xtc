@@ -3,7 +3,7 @@ import pytest
 from xtc.utils.math import (
     estimate_count_prob_smooth,
     estimate_unique_prob_good_turing,
-    estimate_unique_num_chao1,
+    estimate_richness_chao1,
 )
 
 RTOL, ATOL = 1e-3, 1e-6
@@ -59,10 +59,10 @@ CHAO1_TESTS = [
     (100, 0, 0, 100, "no once returns same"),
     (1, 1, 0, 1, "1 once estimates to +0"),
     (2, 1, 1, 2, "1 once, 1 twice estimates to +0"),
-    (2, 2, 0, 3, "2 once estimates to +1"),
-    (3, 2, 1, 4, "2 once, 1 twice estimates to +1"),
-    (9, 8, 1, 23, "8 once, 1 twice estimates to +14"),
-    (100, 8, 1, 100+14, "do not depend on unique size"),
+    (2, 2, 0, 2+1, "2 once estimates to +1"),
+    (3, 2, 1, 3+0.5, "2 once, 1 twice estimates to +0.5"),
+    (9, 8, 1, 9+14, "8 once, 1 twice estimates to +14"),
+    (100, 8, 1, 100+14, "do not depend on draw size"),
 ]
 
 @pytest.mark.parametrize(
@@ -70,5 +70,5 @@ CHAO1_TESTS = [
     CHAO1_TESTS,
 )
 def test_chao1(uniques: int, once: int, twice: int, expected: int, msg: str):
-    estimated = estimate_unique_num_chao1(uniques, once, twice)
+    estimated = estimate_richness_chao1(uniques, once, twice)
     assert estimated == expected, f"unexpected: {msg}"

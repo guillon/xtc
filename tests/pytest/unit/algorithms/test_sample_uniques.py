@@ -47,5 +47,5 @@ def test_sample_uniques(
         message: str,
 ):
     sampler = partial(draw_from_iter, iter(draws))
-    samples = list(sample_uniques(sampler, requested_len, **kwargs))
+    samples = sample_uniques(sampler, requested_len, **kwargs)
     assert len(samples) == expected_len, f"unexpected: {samples}: {message}"

@@ -100,11 +100,11 @@ def pow2divisor(value: int) -> int:
     return value & -value
 
 
-def estimate_unique_num_chao1(
+def estimate_richness_chao1(
     unique_num: int,
     once_num: int,
     twice_num: int,
-) -> int:
+) -> float:
     """
     Returns the Chao1 richness estimate in order to
     approximate the number of unique samples in a space from the
@@ -120,7 +120,7 @@ def estimate_unique_num_chao1(
     assert twice_num >= 0
     assert unique_num >= once_num + twice_num
     chao1_bc = unique_num + (once_num * (once_num - 1)) / (2 * (twice_num + 1))
-    return int(chao1_bc + 0.5)
+    return chao1_bc
 
 
 def estimate_unique_prob_good_turing(
