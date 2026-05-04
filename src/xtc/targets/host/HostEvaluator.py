@@ -4,13 +4,7 @@
 #
 from typing import Any
 from typing_extensions import override
-import numpy as np
 from pathlib import Path
-
-from xtc.runtimes.types.ndarray import NDArray
-from xtc.utils.numpy import (
-    np_init,
-)
 
 from xtc.runtimes.host.HostRuntime import HostRuntime
 

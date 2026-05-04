@@ -1,4 +1,5 @@
-
+import pytest
+from pathlib import Path
 from tvm_utils import requires_tvm, matmul_impl
 
 I, J, K, DTYPE = 128, 256, 91, "float32"
@@ -25,11 +26,11 @@ def sched_tile2(sch):
 
 def sched_tile2p(sch):
     sch.tile("i", {"i1": 64, "i2": 4})
-    sch.tile("j", {"j1": 64, "j2": 64})
+    sch.tile("j", {"j1": 64, "j2": 16})
     sch.tile("k", {"k1": 13})
     sch.interchange(["i", "i1", "j", "k", "j1", "k1", "i2", "j2"])
     sch.parallelize(["i", "i1"])
-    sch.unroll({"j2": 64, "k1": 13, "i2": 4})
+    sch.unroll({"j2": 64, "i2": 4})
     sch.vectorize(["j2"])
     # Expected in TVM schedule
     print(sch)
@@ -127,3 +128,42 @@ def test_sched_tile_unroll_vec():
     print(impl.graph)
     schedule = check_schedule(impl, sched_tile_unroll_vec)
     check_evaluate(impl, schedule)
+
+def check_compile_evaluate(imp, schedule, compiler_args, evaluate_args):
+    compiler = imp.get_compiler(
+        **compiler_args,
+    )
+    module = compiler.compile(schedule)
+    evaluator = module.get_evaluator(
+        **evaluate_args,
+    )
+    results, code, error_msg = evaluator.evaluate()
+    assert code == 0, f"failed to evaluate: {error_msg}"
+    print(f"Results: {results}")
+    assert isinstance(results[0], float) and float(results[0]) > 0
+
+@requires_tvm
+@pytest.mark.parametrize(
+    "compiler_args",
+    (
+        {"shared_lib": True},
+        {"emit_c": True},
+        {"ar_lib": True},
+    )
+)
+def test_backend_variant(tmpdir, compiler_args):
+    impl = matmul_impl(*MATMUL_ARGS, "matmul", emit_c=True)
+    print(impl.graph)
+    libpath = Path(tmpdir) / impl.graph.name
+    schedule = check_schedule(impl, sched_tile2p)
+    check_compile_evaluate(
+        impl,
+        schedule,
+        {
+            "dump_file": str(libpath),
+            **compiler_args,
+        },
+        {
+            "validate": True,
+        }
+    )

@@ -10,7 +10,7 @@ def requires_tvm(*arg):
     return pytest.mark.skipif(not has_tvm(), reason="requires TVM")(*arg)
 
 
-def matmul_impl(i, j, k, dtype, name):
+def matmul_impl(i, j, k, dtype, name, **kwargs):
     import xtc.graphs.xtc.op as O
     from xtc.backends.tvm import TVMBackend
 
@@ -20,4 +20,4 @@ def matmul_impl(i, j, k, dtype, name):
     with O.graph(name=name) as gb:
         O.matmul(a, b, name="C")
 
-    return TVMBackend(gb.graph)
+    return TVMBackend(gb.graph, **kwargs)

@@ -4,3 +4,15 @@
 #
 from .HostModule import HostModule
 from .HostEvaluator import HostEvaluator, HostExecutor
+from .HostCEvaluator import HostCEvaluator, HostCExecutor
+from .HostAREvaluator import HostAREvaluator, HostARExecutor
+
+__all__ = [
+    "HostModule",
+    "HostEvaluator",
+    "HostExecutor",
+    "HostCEvaluator",
+    "HostCExecutor",
+    "HostAREvaluator",
+    "HostARExecutor",
+]

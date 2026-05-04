@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
-from typing import Any, cast
 from typing_extensions import override
+from typing import Any
 
 import xtc.itf as itf
 from xtc.itf.graph import Graph
@@ -14,6 +14,8 @@ from xtc.utils.evaluation import (
 )
 
 from .HostEvaluator import HostExecutor, HostEvaluator
+from .HostCEvaluator import HostCExecutor, HostCEvaluator
+from .HostAREvaluator import HostARExecutor, HostAREvaluator
 
 
 __all__ = [
@@ -29,17 +31,35 @@ class HostModule(itf.comp.Module):
         file_name: str,
         file_type: str,
         graph: Graph | None = None,
+        headers: list[str] = [],
+        headers_path: list[str] = [],
+        shlibs: list[str] = [],
+        arlibs: list[str] = [],
+        csrcs: list[str] = [],
         **kwargs: Any,
     ) -> None:
         self._name = name
         self._payload_name = payload_name
         self._file_name = file_name
         self._file_type = file_type
-        assert self._file_type == "shlib", "only support shlib for JIR Module"
-        lib_suffixes = ("so", "dylib")
-        assert self._file_name.endswith(lib_suffixes), (
-            f"file name {self._file_name} is not a shlib"
+        shlib_suffixes = ("so", "dylib")
+        assert self._file_type in ["shlib", "csrc", "arlib"], (
+            "only support shlib/csrc/arlib Module"
         )
+        assert self._file_type != "shlib" or self._file_name.endswith(shlib_suffixes), (
+            "file name is not a shlib"
+        )
+        assert self._file_type != "csrc" or self._file_name.endswith(".c"), (
+            "file name is not c file"
+        )
+        assert self._file_type != "arlib" or self._file_name.endswith(".a"), (
+            "file name is not an archive"
+        )
+        self._shlibs = shlibs
+        self._arlibs = arlibs
+        self._headers = headers
+        self._headers_path = headers_path
+        self._csrcs = csrcs
         self._bare_ptr = kwargs.get("bare_ptr", True)
         self._graph = graph
         if self._graph is not None:
@@ -77,14 +97,44 @@ class HostModule(itf.comp.Module):
 
     @override
     def get_evaluator(self, **kwargs: Any) -> itf.exec.Evaluator:
-        return HostEvaluator(
+        cls = {
+            "shlib": HostEvaluator,
+            "csrc": HostCEvaluator,
+            "arlib": HostAREvaluator,
+        }[self.file_type]
+        return cls(
             self,
             **kwargs,
         )
 
     @override
     def get_executor(self, **kwargs: Any) -> itf.exec.Executor:
-        return HostExecutor(
+        cls = {
+            "shlib": HostExecutor,
+            "csrc": HostCExecutor,
+            "arlib": HostARExecutor,
+        }[self.file_type]
+        return cls(
             self,
             **kwargs,
         )
+
+    @property
+    def shlibs(self) -> list[str]:
+        return self._shlibs
+
+    @property
+    def arlibs(self) -> list[str]:
+        return self._arlibs
+
+    @property
+    def csrcs(self) -> list[str]:
+        return self._csrcs
+
+    @property
+    def headers(self) -> list[str]:
+        return self._headers
+
+    @property
+    def headers_path(self) -> list[str]:
+        return self._headers_path
