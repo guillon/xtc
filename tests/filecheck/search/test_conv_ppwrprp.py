@@ -73,7 +73,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  
 # CHECK-NEXT:  schedule O2: [1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 16, 1, 1, 1, 1]
 # CHECK-NEXT:  O = obj['%2']
-# CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
+# CHECK-NEXT:  O_W0 = sch.cache_write(O, "global")
 # CHECK-NEXT:  b, h, w, f, = O.op.axis
 # CHECK-NEXT:  r, s, c, = O.op.reduce_axis
 # CHECK-NEXT:  b, b1 = sch[O].split(b, factor=1)
@@ -111,7 +111,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  
 # CHECK-NEXT:  schedule O3: [1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 16, 1, 1, 3, 1]
 # CHECK-NEXT:  O = obj['%2']
-# CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
+# CHECK-NEXT:  O_W0 = sch.cache_write(O, "global")
 # CHECK-NEXT:  b, h, w, f, = O.op.axis
 # CHECK-NEXT:  r, s, c, = O.op.reduce_axis
 # CHECK-NEXT:  b, b1 = sch[O].split(b, factor=1)
@@ -349,7 +349,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sample 199: [1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 16, 1, 1, 3, 1]
 # CHECK-NEXT:  stats {'filtered': 200, 'all': 404}
 # CHECK-NEXT:  O = obj['%2']
-# CHECK-NEXT:  O_W0 = sch.cache_write(O, "local")
+# CHECK-NEXT:  O_W0 = sch.cache_write(O, "global")
 # CHECK-NEXT:  b, h, w, f, = O.op.axis
 # CHECK-NEXT:  r, s, c, = O.op.reduce_axis
 # CHECK-NEXT:  b, b1 = sch[O].split(b, factor=1)
