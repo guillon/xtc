@@ -3,13 +3,13 @@
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
 from typing import Any
+import yaml
 
 from .graph import XTCGraph
 from .context import XTCGraphContext
-from .expr import XTCTensorExpr
+from .expr import XTCTensorExpr, XTCExpr
 from .operators import XTCOperator
 from . import op_factory
-from yaml import safe_load
 
 
 class graph_builder:
@@ -71,9 +71,15 @@ class graph_builder:
 
     @classmethod
     def loads(cls, yaml_str: str) -> None:
-        cls.from_dict(safe_load(yaml_str))
+        cls.from_dict(yaml.safe_load(yaml_str))
 
     @classmethod
     def load(cls, file_name: str) -> None:
         with open(file_name, "r") as f:
-            cls.from_dict(safe_load(f))
+            cls.from_dict(yaml.safe_load(f))
+
+    def set_outputs(self, *outs: XTCExpr) -> None:
+        return XTCGraphContext.current.set_outputs(*outs)
+
+    def set_inputs(self, *inps: XTCExpr) -> None:
+        return XTCGraphContext.current.set_inputs(*inps)
