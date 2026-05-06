@@ -249,12 +249,12 @@ class TVMScheduleEmitter:
             if not parent:
                 print(f"{tens} = {obj}['{self._op.name}']", file=outf)
             else:
-                print(f'{tens} = {sch}.cache_write({parent}, "local")', file=outf)
+                print(f'{tens} = {sch}.cache_write({parent}, "global")', file=outf)
             for tile_axis in tiles:
                 if tile_axis in packings:
                     inp_idx, _, _ = packings[tile_axis]
                     print(
-                        f'I_R{inp_idx} = {sch}.cache_read(INPS[{inp_idx}], "local", [{tens}])',
+                        f'I_R{inp_idx} = {sch}.cache_read(INPS[{inp_idx}], "global", [{tens}])',
                         file=outf,
                     )
                 if tile_axis in fuses:
@@ -426,7 +426,7 @@ class TVMScheduler(itf.schd.Scheduler):
     def buffer_at(
         self, axis: str, mtype: str | None = None, root: str = DEFAULT_ROOT
     ) -> None:
-        assert mtype is None or mtype == "local"
+        assert mtype is None or mtype == "global"
         self.write_caches.append(axis)
 
     @override
@@ -438,7 +438,7 @@ class TVMScheduler(itf.schd.Scheduler):
         pad: bool = False,
         root: str = DEFAULT_ROOT,
     ) -> None:
-        assert mtype is None or mtype == "local"
+        assert mtype is None or mtype == "global"
         assert input_idx >= 0 and input_idx < len(self._op.np_inputs_spec())
         self.read_buffers.append((axis, input_idx, pad))
 

@@ -6,8 +6,10 @@
 from io import StringIO
 from contextlib import redirect_stderr
 import xtc.graphs.xtc.op as O
-import xtc.runtimes.host.runtime as rt
+from xtc.runtimes.host import HostRuntime
 from xtc.backends.mlir import Backend  # Choose between mlir & tvm here
+
+rt = HostRuntime.get()
 
 # Define the operator and the graph
 I, J, K, dtype = 4, 32, 512, "float32"

@@ -9,7 +9,7 @@ from typing_extensions import override
 
 from xtc.runtimes.types.dlpack import DLDevice, DLDataType
 
-from xtc.utils.cfunc import CFunc, _str_list_to_c, _c_ascii_str
+from xtc.utils.cfunc import CFunc, _str_list_to_c
 from xtc.itf.runtime.common import CommonRuntimeInterface
 
 from .runtime import runtime_funcs, resolve_runtime, RuntimeType
@@ -201,8 +201,4 @@ class HostRuntime(CommonRuntimeInterface):
 
     @override
     def evaluate_flops(self, dtype_name: str | bytes) -> float:
-        return float(
-            self.__get_runtime_func("evaluate_flops")(
-                _c_ascii_str.from_param(dtype_name)
-            )
-        )
+        return float(self.__get_runtime_func("evaluate_flops")(dtype_name))

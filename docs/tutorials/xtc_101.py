@@ -377,7 +377,9 @@ def _(mo):
     compile_editor = mo.ui.code_editor(
         value='''import xtc.graphs.xtc.op as O
 from xtc.graphs.xtc.graph import XTCGraph
-import xtc.runtimes.host.runtime as rt
+from xtc.runtimes.host import HostRuntime
+
+rt = HostRuntime.get()
 
 # Problem setup
 I, J, K, dtype = 4, 32, 512, "float32"
@@ -481,7 +483,9 @@ def _(mo):
     sched_editor = mo.ui.code_editor(
         value='''import xtc.graphs.xtc.op as O
 from xtc.graphs.xtc.graph import XTCGraph
-import xtc.runtimes.host.runtime as rt
+from xtc.runtimes.host import HostRuntime
+
+rt = HostRuntime.get()
 
 # Problem setup
 I, J, K, dtype = 4, 32, 512, "float32"
@@ -603,7 +607,9 @@ def _(mo):
         value='''import xtc.graphs.xtc.op as O
 from xtc.graphs.xtc.graph import XTCGraph
 from xtc.schedules.descript import descript_scheduler
-import xtc.runtimes.host.runtime as rt
+from xtc.runtimes.host import HostRuntime
+
+rt = HostRuntime.get()
 
 # Problem setup
 I, J, K, dtype = 4, 32, 512, "float32"
@@ -710,10 +716,12 @@ from xtc.graphs.xtc.graph import XTCGraph
 from xtc.backends.tvm import Backend as TVM_Backend
 from xtc.backends.mlir import Backend as MLIR_Backend
 from xtc.schedules.descript import descript_scheduler
-import xtc.runtimes.host.runtime as rt
+from xtc.runtimes.host import HostRuntime
 from io import StringIO
 from contextlib import redirect_stderr
 import itertools
+
+rt = HostRuntime.get()
 
 # Problem setup
 I, J, K, dtype = 4, 32, 512, "float32"
@@ -907,9 +915,11 @@ def _(mo, run_exploration):
 from xtc.graphs.xtc.graph import XTCGraph
 from xtc.backends.mlir import Backend
 from xtc.search.strategies import Strategy_OO
-import xtc.runtimes.host.runtime as rt
+from xtc.runtimes.host import HostRuntime
 from io import StringIO
 from contextlib import redirect_stderr
+
+rt = HostRuntime.get()
 
 # Problem setup
 I, J, K, dtype = 64, 128, 256, "float32"
@@ -1068,7 +1078,9 @@ def _(mo):
 '''# Run numpy matmul and collect elapsed time
 import timeit
 import numpy as np
-import xtc.runtimes.host.runtime as rt
+from xtc.runtimes.host import HostRuntime
+
+rt = HostRuntime.get()
 
 I, J, K, dtype = 1024, 1024, 1024, "float32"
 

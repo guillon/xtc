@@ -48,7 +48,7 @@ from xtc.utils.numpy import (
 )
 from xtc.utils.math import mulall
 from xtc.runtimes.types.ndarray import NDArray
-import xtc.runtimes.host.runtime as runtime
+from xtc.runtimes.host import HostRuntime
 from xtc.artifacts import get_operation, list_operations
 from xtc.search.optimizers import Optimizers
 
@@ -566,7 +566,7 @@ def peak_time(args: NS) -> float:
     flops = args.peak_flops
     if flops is None:
         dtype = DTYPES_MAP[args.dtype]
-        flops = runtime.evaluate_flops(dtype)
+        flops = HostRuntime.get().evaluate_flops(dtype)
         assert flops != 0, f"unable to evaluate machine flops for type {dtype}"
         logger.debug(f"Estimated peak flops: %g", flops)
     dims_names = OPERATORS[args.operator]["dims"]
@@ -779,6 +779,8 @@ def optimize(args: NS):
     graph = OPERATORS[args.operator]["operation"](*op_args, name=args.func_name)
     strategy = get_strategy(graph, args)
     write_run_manifest(args, strategy)
+    if args.save_temps:
+        graph.dump(Path(args.save_temps_dir) / f"{graph.name}.graph.yaml")
     if args.test or args.opt_level in [0, 1, 2, 3]:
         schedule = args.test
         if not schedule:

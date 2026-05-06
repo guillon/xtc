@@ -64,3 +64,16 @@ jobs:
       - name: Run Checks
         run: |
           make check
+      - name: Run Explore One Shot
+        run: |
+          env STRATEGIES=tile8dvr BACKENDS="tvm mlir" ./scripts/explore/run-explore-one-shot.sh artifacts/explore
+      - name: Run Explore Variants
+        run: |
+          env STRATEGIES=tile8dvr BACKENDS="tvm mlir" ./scripts/explore/run-explore-variants.sh artifacts/explore
+          env NOSHOW=1 scripts/explore/display-explore-variants.sh artifacts/explore
+      - name: Publish artifacts
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-os-${{ matrix.os }}
+          path: artifacts/
