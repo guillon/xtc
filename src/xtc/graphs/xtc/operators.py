@@ -11,6 +11,7 @@ import operator
 import numpy as np
 import hashlib
 
+from xtc.utils.math import mulall
 from xtc.itf.operator import Operator
 from xtc.itf.data import Tensor, TensorType
 from xtc.itf.runtime.accelerator import AcceleratorDevice
@@ -167,8 +168,8 @@ class XTCOperMatmul(XTCOperator):
     ) -> XTCOperation:
         inp0_shape = inps_types[0].constant_shape
         inp1_shape = inps_types[1].constant_shape
-        i, k = inp0_shape
-        bk, j = inp1_shape
+        i, k = (inp0_shape[0], mulall(list(inp0_shape[1:])))
+        bk, j = (mulall(list(inp1_shape[:-1])), inp1_shape[-1])
         assert k == bk
         return self._get_operation(
             inps_types,
@@ -190,10 +191,12 @@ class XTCOperMatmul(XTCOperator):
         assert len(inputs_types) == 2
         assert inputs_types[0].shape is not None
         assert inputs_types[1].shape is not None
-        assert len(inputs_types[0].shape) == 2
-        assert len(inputs_types[1].shape) == 2
-        i, k = cast(XTCTensorType, inputs_types[0]).constant_shape
-        bk, j = cast(XTCTensorType, inputs_types[1]).constant_shape
+        assert len(inputs_types[0].shape) >= 2
+        assert len(inputs_types[1].shape) >= 2
+        inp0_shape = cast(XTCTensorType, inputs_types[0]).constant_shape
+        inp1_shape = cast(XTCTensorType, inputs_types[1]).constant_shape
+        i, k = (inp0_shape[0], mulall(list(inp0_shape[1:])))
+        bk, j = (mulall(list(inp1_shape[:-1])), inp1_shape[-1])
         assert k == bk, (
             f"incompatible dimension k for matmul inputs shapes: ({i}, {k}) ({bk}, {j})"
         )
@@ -205,8 +208,12 @@ class XTCOperMatmul(XTCOperator):
 
     @override
     def forward(self, inputs: Sequence[Tensor]) -> Sequence[XTCTensor]:
+        A = inputs[0].numpy()
+        B = inputs[1].numpy()
+        A = A.reshape((A.shape[0], -1))
+        B = B.reshape((-1, B.shape[-1]))
         # Note, use np.dot instead of np.matmul which may be buggy on Mac accelerators
-        matmul = XTCTensor(np.dot(inputs[0].numpy(), inputs[1].numpy()))
+        matmul = XTCTensor(np.dot(A, B))
         expected_type = self.forward_types([inp.type for inp in inputs])[0]
         assert matmul.type == expected_type, (
             f"output type mismatch expect: {matmul.type} != {expected_type}"

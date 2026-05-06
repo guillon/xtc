@@ -296,6 +296,14 @@ class TVMOperatorMatmul(TVMOperator):
             B = te.placeholder((Kk, Kj), name="B", dtype=dtype)
         else:
             A, B = inputs
+        Ashape = tuple(A.shape)
+        Bshape = tuple(B.shape)
+        Anewshape = (Ashape[0], mulall(list(Ashape[1:])))
+        Bnewshape = (mulall(list(Bshape[:-1])), Bshape[-1])
+        if Ashape != Anewshape:
+            A = topi.reshape(A, newshape=Anewshape)
+        if Bshape != Bnewshape:
+            B = topi.reshape(B, newshape=Bnewshape)
         k = te.reduce_axis((0, Kk), "k")
         O = te.compute(
             (Ki, Kj),
