@@ -139,3 +139,33 @@ class Graph(ABC):
             List of output tensors
         """
         ...
+
+    @abstractmethod
+    def ops_count(self) -> int:
+        """Returns an estimate of the operation count for
+        the whole graph. Used for peak performance estimates.
+
+        This may not return an overestimate, only a lower bound.
+
+        For instance on a graph with matmul->relu
+        with dimensions i, j, k, this returns i*j*k + i*j.
+
+        Returns:
+            Estimated graph ops count
+        """
+        ...
+
+    @abstractmethod
+    def ops_dtype(self) -> str:
+        """Returns the datatype string for the estimated
+        ops count.
+
+        This is possibly an approximation when the graph
+        contains multiple nodes type. In this case the
+        ops_count may return for instance a lower count
+        and ensure they match the dtype.
+
+        Returns:
+            Data type string of the main graph ops
+        """
+        ...
