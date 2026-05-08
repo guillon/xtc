@@ -38,7 +38,7 @@ class BaseStrategy(Strategy):
     def __init__(
         self,
         graph: Graph,
-        sample_names: list[str],
+        sample_names: list[str] | None = None,
         vec_size: int = 16,
         max_unroll: int = 256,
         threads: int = 1,
@@ -70,6 +70,7 @@ class BaseStrategy(Strategy):
     @property
     @override
     def sample_names(self) -> list[str]:
+        assert self._sample_names is not None
         return self._sample_names
 
     @override

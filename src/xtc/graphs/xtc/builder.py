@@ -40,12 +40,13 @@ class graph_builder:
             else:
                 return obj
 
-        expr_uid_map = {}
         if "name" in graph_dict:
             XTCGraphContext.name(graph_dict["name"])
 
+        expr_uid_map = {}
         for inp in graph_dict["inputs"]:
             expr_uid_map[inp["uid"]] = XTCTensorExpr.from_dict(inp["expr"])
+        XTCGraphContext.inputs(*expr_uid_map.values())
 
         for node in graph_dict["nodes"]:
             expr = node["expr"]

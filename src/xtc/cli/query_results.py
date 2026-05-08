@@ -60,6 +60,11 @@ class ResultsDB(ABC):
             platform = self.get_node_platform(self._node, self._node_target)
         compiler = self.get_compiler(target, threads, backend)
         operator = self.get_operator(graph)
+        logger.debug("MATCH: version: %s", version)
+        logger.debug("MATCH: platform: %s", platform)
+        logger.debug("MATCH: compiler: %s", compiler)
+        logger.debug("MATCH: operator: %s", operator)
+        operator = operator[:2]
         for log in results:
             if (
                 version == log["version"][: len(version)]
