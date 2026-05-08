@@ -229,6 +229,10 @@ def main():
                 entry["compiler"],
                 "results:",
                 entry["results"][1],
+                "strategy:",
+                entry["strategy"][2],
+                "schedule:",
+                entry["schedule"],
             )
     if args.best:
         log = db.get_best(
