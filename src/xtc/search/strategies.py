@@ -42,7 +42,7 @@ class BaseStrategy(Strategy):
         vec_size: int = 16,
         max_unroll: int = 256,
         threads: int = 1,
-        max_parallelize: int = 1,
+        max_parallelize: int = -1,
         **kwargs: Any,
     ) -> None:
         self._graph = graph
