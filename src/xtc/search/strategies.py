@@ -350,6 +350,7 @@ class BaseStrategyPRTScheme(BaseStrategy):
 
     We also define dditional items which can be mixed with tile items:
     - `W`: add an output write buffer at this level
+    - `F`: fuse producer at this level
 
     Then we can define scheme as a sequence of items, for instance:
     - `PRP`: P-axes, R-axes then a for all P-axes
@@ -383,6 +384,7 @@ class BaseStrategyPRTScheme(BaseStrategy):
             self._base_axis,
             self._item_map,
             self._w_axes,
+            self._f_axes,
         ) = self._init_order_tiles()
         self._tiles_idx = self._init_tiles_idx()
         self._x_size = sum([level - 1 for level in self._tiles_levels.values()])
@@ -396,12 +398,18 @@ class BaseStrategyPRTScheme(BaseStrategy):
     def _init_order_tiles(
         self,
     ) -> tuple[
-        list[str], dict[str, int], dict[str, str], dict[int, list[str]], list[str]
+        list[str],
+        dict[str, int],
+        dict[str, str],
+        dict[int, list[str]],
+        list[str],
+        list[str],
     ]:
         base_axis = {}
         item_map = {}
         order = []
         w_axes = []
+        f_axes = []
         levels = {axis: 0 for axis in self._axes}
         prev_axis = ""
         for item_idx, item in enumerate(self._scheme):
@@ -415,11 +423,15 @@ class BaseStrategyPRTScheme(BaseStrategy):
             elif item == "O":
                 # Item O is outer parallel first, reductions, remaining parallels
                 axis_lst = [*self._p_axes[:1], *self._r_axes, *self._p_axes[1:]]
-            else:
-                assert item == "W"
+            elif item == "W":
                 axis_lst = []
                 assert prev_axis
                 w_axes.append(prev_axis)
+            else:
+                assert item == "F"
+                axis_lst = []
+                assert prev_axis
+                f_axes.append(prev_axis)
             item_axes = []
             for axis in axis_lst:
                 tiled_axis = f"{axis}" if levels[axis] == 0 else f"{axis}{levels[axis]}"
@@ -429,7 +441,7 @@ class BaseStrategyPRTScheme(BaseStrategy):
             order.extend(item_axes)
             item_map[item_idx] = item_axes
             prev_axis = item_axes[-1] if item_axes else ""
-        return order, levels, base_axis, item_map, w_axes
+        return order, levels, base_axis, item_map, w_axes, f_axes
 
     def _init_tiles_idx(self) -> dict[str, int]:
         tiles_idx = {}
@@ -506,7 +518,8 @@ class BaseStrategyPRTScheme(BaseStrategy):
     def _init_sample_names(self) -> list[str]:
         x_names = [f"x{i}" for i in range(self._x_size)]
         w_names = [f"w{i}" for i in range(len(self._w_axes))]
-        return x_names + w_names
+        f_names = [f"f{i}" for i in range(len(self._f_axes))]
+        return x_names + w_names + f_names
 
     def _vector_index(self) -> int | None:
         indexes = [self._tiles_idx[axis] for axis in self._vectorized]
@@ -602,7 +615,8 @@ class BaseStrategyPRTScheme(BaseStrategy):
             for axis, level in self._tiles_levels.items()
         ]
         w_bools = [[[0], [1]]] * len(self._w_axes)
-        return tiles + w_bools
+        f_bools = [[[0], [1]]] * len(self._f_axes)
+        return tiles + w_bools + f_bools
 
     @override
     def _filter(self, samples: Iterator[VecSample]) -> Iterator[VecSample]:
@@ -622,7 +636,12 @@ class BaseStrategyPRTScheme(BaseStrategy):
         buffers = [
             axis
             for idx, axis in enumerate(self._w_axes)
-            if in_x[-len(self._w_axes) + idx] != 0
+            if in_x[-(len(self._w_axes) + len(self._f_axes)) + idx] != 0
+        ]
+        fuse_prods = [
+            axis
+            for idx, axis in enumerate(self._f_axes)
+            if in_x[-(len(self._f_axes)) + idx] != 0
         ]
         axes_order = self._order
         parallel_axes = self._parallel
@@ -636,6 +655,8 @@ class BaseStrategyPRTScheme(BaseStrategy):
         sch.unroll(unroll_axes)
         for axis in buffers:
             sch.buffer_at(axis)
+        for axis in fuse_prods:
+            sch.fuse_producer_at(axis, 0)
 
     def _check_divisibility_from_tiles(self, tiles: dict[str, int]) -> bool:
         divisible = all(
@@ -779,6 +800,53 @@ class Strategy_PPRPRPvr(Strategy_PPRPRP):
       - inner RP (k1*i3*j3) bytes size lower than machine L1
       - inner PRP (i2*j2*k1*i3*j3) bytes size lower than machine L2
 
+    """
+
+    def __init__(self, graph: Graph, **kwargs: Any) -> None:
+        super().__init__(graph, **kwargs)
+
+    @override
+    def _filter(self, samples: Iterator[VecSample]) -> Iterator[VecSample]:
+        samples = super()._filter(samples)
+        samples = self._filter_vectorized(samples, "filtered_vec")
+        samples = self._filter_reg_num(samples, 1, "filtered_reg")
+        samples = self._filter_l1_size(samples, 2, "filtered_l1")
+        samples = self._filter_l2_size(samples, 3, "filtered_l2")
+        return samples
+
+
+class Strategy_PFPWRPRP(BaseStrategyPRTScheme):
+    """Strategy for Ansor like tiling and write buffer + fusion.
+
+    Same as Strategy_PPWRPRP, but with an additional fusion.
+    """
+
+    def __init__(self, graph: Graph, **kwargs: Any) -> None:
+        super().__init__(graph, scheme="PFPWRPRP", **kwargs)
+
+
+class Strategy_PFPWRPRPv(Strategy_PFPWRPRP):
+    """Strategy for Ansor like tiling and write buffer + fusion with space vectorization.
+
+    Same as Strategy_PFPWRPRP, but with an additional constraint for the
+    space to have the inner axis vectorized as in strategy PPRPRPV.
+    """
+
+    def __init__(self, graph: Graph, **kwargs: Any) -> None:
+        super().__init__(graph, **kwargs)
+
+    @override
+    def _filter(self, samples: Iterator[VecSample]) -> Iterator[VecSample]:
+        samples = super()._filter(samples)
+        samples = self._filter_vectorized(samples, "filtered_vec")
+        return samples
+
+
+class Strategy_PFPWRPRPvr(Strategy_PFPWRPRP):
+    """Strategy for Ansor like tiling and write buffer + fusion with space constraints.
+
+    Same as Strategy_PFPWRPRP, but with additional constraints for the
+    space as in strategy PPRPRPvr.
     """
 
     def __init__(self, graph: Graph, **kwargs: Any) -> None:
@@ -964,6 +1032,9 @@ class Strategies:
         "tile_ppwrprp": Strategy_PPWRPRP,
         "tile_ppwrprp_v": Strategy_PPWRPRPv,
         "tile_ppwrprp_vr": Strategy_PPWRPRPvr,
+        "tile_pfpwrprp": Strategy_PFPWRPRP,
+        "tile_pfpwrprp_v": Strategy_PFPWRPRPv,
+        "tile_pfpwrprp_vr": Strategy_PFPWRPRPvr,
         "tile_goto": Strategy_GOTO,
         "tile_goto_r": Strategy_GOTO_R,
     }
