@@ -1013,10 +1013,14 @@ STRATEGIES_ALIASES = {
     "tile7d": "tile_pprprp",
     "tile7dv": "tile_pprprp_v",
     "tile7dvr": "tile_pprprp_vr",
-    # legacy: tile8d* for matmul is same as PPRRPRP*
+    # legacy: tile8d* for matmul is same as PPWRPRP*
     "tile8d": "tile_ppwrprp",
     "tile8dv": "tile_ppwrprp_v",
     "tile8dvr": "tile_ppwrprp_vr",
+    # legacy: tile9d* for matmul is same as PFPWRPRP*
+    "tile9d": "tile_pfpwrprp",
+    "tile9dv": "tile_pfpwrprp_v",
+    "tile9dvr": "tile_pfpwrprp_vr",
 }
 
 STRATEGIES_CLASSES = {
