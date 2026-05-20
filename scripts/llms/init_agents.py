@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
 """
-Generates a CLAUDE.md from a markdown file by:
-- Replacing the main title with a CLAUDE.md header
+Generates AGENTS.md or CLAUDE.md from a markdown file by:
+- Replacing the main title with a format-specific header
 - Removing specified sections
 """
 
 import sys
 import re
+from typing import Literal
+
+DocFormat = Literal["agents", "claude"]
+
+DOC_CONFIG: dict[DocFormat, tuple[str, str]] = {
+    "agents": (
+        "# AGENTS.md",
+        "This file provides guidance to LLM agents when working with code in this repository.",
+    ),
+    "claude": (
+        "# CLAUDE.md",
+        "This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.",
+    ),
+}
 
 
 def count_h1(lines: list[str]) -> int:
@@ -49,15 +63,23 @@ def transform_markdown(lines: list[str], skip_sections: list[str]) -> list[str]:
 
 
 def main() -> int:
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 3:
         print(
-            f"Usage: {sys.argv[0]} <markdown-file> [sections-to-skip...]",
+            f"Usage: {sys.argv[0]} <agents|claude> <markdown-file> [sections-to-skip...]",
             file=sys.stderr,
         )
         return 1
 
-    file_path = sys.argv[1]
-    skip_sections = sys.argv[2:]
+    doc_format = sys.argv[1]
+    if doc_format not in DOC_CONFIG:
+        print(
+            f"Error: unknown format {doc_format!r}, expected 'agents' or 'claude'",
+            file=sys.stderr,
+        )
+        return 1
+
+    file_path = sys.argv[2]
+    skip_sections = sys.argv[3:]
 
     with open(file_path, encoding="utf-8") as f:
         lines = [line.rstrip("\n") for line in f]
@@ -70,14 +92,12 @@ def main() -> int:
         )
         return 1
 
-    # CLAUDE.md header
-    print("# CLAUDE.md")
+    title, intro = DOC_CONFIG[doc_format]  # type: ignore[index]
+    print(title)
     print()
-    print(
-        "This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository."
-    )
+    print(intro)
+    print()
 
-    # Transform and output
     for line in transform_markdown(lines, skip_sections):
         print(line)
 

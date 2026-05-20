@@ -145,4 +145,4 @@ The performance counters can be accessed is the GPU has a compute capability >=7
 
 ## AI assistants
 
-To create the `CLAUDE.md` file required to use Claude Code: `make claude`
+To create agent guidance files from this README: `make agents` (AGENTS.md) or `make claude` (CLAUDE.md)
