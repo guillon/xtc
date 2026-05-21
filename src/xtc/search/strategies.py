@@ -1074,6 +1074,37 @@ try:
         @override
         def sample_names(self) -> list[str]:
             return self._sample_names
+
+    class Strategy_Descript_Explore(Strategy_Descript):
+        def __init__(
+            self,
+            graph: Graph,
+            spec: dict[str, dict[str, Any]] | str,
+            constraints: list[str] = [],
+            partial_tiles: bool = False,
+            partial_unrolls: bool = False,
+            initialize: bool = True,
+        ) -> None:
+            self._sample_shape: list[str] = []
+            super().__init__(
+                graph, spec, constraints, partial_tiles, partial_unrolls, initialize
+            )
+
+        @override
+        def sample(self, num: int, seed: int | None = 0) -> Iterator[Sample]:
+            sample = super().sample(num, seed)
+            for x in sample:
+                if not self._sample_shape:
+                    self._sample_shape = list(x.keys())
+                    print(f"Order of the sampling variables: {self._sample_shape}")
+                yield tuple(x.values())
+
+        @override
+        def generate(self, scheduler: Scheduler, sample: Sample) -> None:
+            assert isinstance(self._sample_shape, list)
+            sample = dict(zip(self._sample_shape, sample))
+            super().generate(scheduler, sample)
+
 except ModuleNotFoundError:
     pass
 
