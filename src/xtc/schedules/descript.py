@@ -83,7 +83,7 @@ class ScheduleInterpreter:
         node: ParameterLoopNestNode,
         root: str,
         head: list[str],
-        axes: dict[str, list[literal]] = dict(),
+        axes: dict[str, list[literal]] | None = None,
     ) -> None:
         """Interpret a schedule spec into an existing node (mutates node)."""
         # Track state during interpretation
@@ -92,6 +92,8 @@ class ScheduleInterpreter:
         last_split: list[tuple[literal, literal | None]] = []
         sizes: dict[str, literal] = {}
         loop_name: str = ""
+        if not axes:
+            axes = dict()
         if self.abstract_dim_sizes:
             for a, v in self.abstract_dim_sizes.items():
                 sizes[a] = v
