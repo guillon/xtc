@@ -40,7 +40,7 @@ jobs:
           brew install libomp x86_64-linux-gnu-binutils aarch64-elf-binutils
           export DYLD_LIBRARY_PATH="/opt/homebrew/opt/libomp/lib:${DYLD_LIBRARY_PATH}"
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -83,7 +83,7 @@ jobs:
           env NOSHOW=1 scripts/explore/display-explore-variants.sh artifacts/explore
       - name: Publish artifacts
         if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: artifacts-os-${{ matrix.os }}
           path: artifacts/
