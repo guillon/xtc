@@ -360,7 +360,7 @@ class TVMCompiler(itf.comp.Compiler):
             tar_file = tmp_dir_path / f"{cname}.tar"
             built.export_library(tar_file)
             with tarfile.open(tar_file) as tf:
-                tf.extractall(tmp_dir)
+                tf.extractall(tmp_dir, filter="data")
             out_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy(tmp_dir_path / "lib1.c", out_dir / f"{out_base}.c")
 
