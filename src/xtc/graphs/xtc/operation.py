@@ -76,12 +76,10 @@ class XTCOperation(Operation):
     @property
     @override
     def ops_count(self) -> int:
-        # Assume single output, hence estimate
-        # ops as the product of all dimensions
-        # in the iteration space
-        shape = self._outputs_types[0].constant_shape
-        ops_count = mulall(list(shape))
-        return ops_count
+        # Assume ops count is the product of the iteration space
+        dims = list(self.dims.values())
+        assert all([isinstance(d, int) for d in dims])
+        return mulall([int(d) for d in dims])
 
     @property
     @override

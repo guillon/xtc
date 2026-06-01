@@ -15,6 +15,7 @@ Though most strategies are supported for all backends for matmult.
 
 """
 
+from abc import ABC, abstractmethod
 import sys
 import os
 import argparse
@@ -35,16 +36,14 @@ from pathlib import Path
 from collections.abc import Sequence, Mapping
 from typing import Any, TypeAlias, cast
 from typing_extensions import override
+from importlib import import_module
 
 from xtc.itf.back import Backend
 from xtc.itf.graph import Graph
 from xtc.itf.comp import Module
 from xtc.itf.search import Strategy, Sample
 
-from xtc.search.strategies import (
-    Strategies,
-    BaseStrategyPRTScheme,
-)
+from xtc.search.strategies import Strategies, BaseStrategyPRTScheme
 
 from xtc.utils.numpy import (
     np_init,
@@ -59,6 +58,14 @@ logger = logging.getLogger(__name__)
 
 NPSamples: TypeAlias = numpy.typing.NDArray[np.int64]
 CallBacks: TypeAlias = Mapping[str, Any]
+
+
+def xtc_load_graph(graph_file: str) -> Graph:
+    import xtc.graphs.xtc.op as O
+
+    with O.graph() as gb:
+        gb.load(graph_file)
+    return gb.graph
 
 
 def xtc_matmul_graph(i: int, j: int, k: int, ftype: str, name: str = "matmul") -> Graph:
@@ -126,7 +133,14 @@ def mlir_impl(graph: Graph) -> tuple[Backend, str]:
     return impl, "mlir"
 
 
+def graph_implementer(graph: Graph, backend: str) -> tuple[Backend, str]:
+    module = import_module(f"xtc.backends.{backend}")
+    impl = module.Backend(graph)
+    return impl, backend
+
+
 def get_eval_parameters(args: NS):
+    assert args.operator is not None
     if args.huge_pages:
         NDArray.set_alloc_alignment(
             2 * 1024 * 1024
@@ -167,7 +181,7 @@ def compile_one_all_backends(
 ):
     compiled = []
     for backend in args.backends:
-        task_ident = f"{args.operator}_{backend}_{ident}"
+        task_ident = f"{graph.name}_{backend}_{ident}"
         compiled.append(
             compile_one(
                 task_ident, backend, graph, strategy, in_x, args, callbacks=callbacks
@@ -188,8 +202,11 @@ def compile_one(
 ):
     assert isinstance(in_x, list), f"X not a list: {in_x} ({type(in_x)})"
     logger.debug("Compile: %s: %s: %s...", ident, backend, in_x)
-    implementer = OPERATORS[args.operator]["backends"][backend]["implementer"]
-    impl, backend_name = implementer(graph)
+    if args.operator:
+        implementer = OPERATORS[args.operator]["backends"][backend]["implementer"]
+        impl, backend_name = implementer(graph)
+    else:
+        impl, backend_name = graph_implementer(graph, backend)
     assert backend_name == backend
     scheduler = impl.get_scheduler()
     node_scheduler = scheduler  # by default the output node is scheduled
@@ -245,13 +262,14 @@ def load_and_evaluate_sample(
         validate=args.validate,
         parameters=args.eval_parameters,
     )
-    reference_impl = OPERATORS[args.operator]["reference_impl"]
-    if reference_impl is not None:
-        evaluator_args.update(
-            dict(
-                reference_impl=reference_impl,
+    if args.operator:
+        reference_impl = OPERATORS[args.operator]["reference_impl"]
+        if reference_impl is not None:
+            evaluator_args.update(
+                dict(
+                    reference_impl=reference_impl,
+                )
             )
-        )
     payload_lib = module.file_name
     evaluator = module.get_evaluator(**evaluator_args)
     evaluate = evaluator.evaluate
@@ -268,7 +286,8 @@ def load_and_evaluate_sample(
 
     result = (in_x, code, time, backend)
     if callbacks and "result" in callbacks:
-        callbacks["result"](result)
+        for callback in callbacks["result"]:
+            callback(result)
     return result
 
 
@@ -504,7 +523,11 @@ def evaluate_all_parallel(
 
 
 def evaluate_iterative(
-    strategy: Strategy, graph: Graph, args: NS, callbacks: CallBacks, peak_time=0
+    strategy: Strategy,
+    graph: Graph,
+    args: NS,
+    callbacks: CallBacks,
+    peak_time: float = 0,
 ):
     optimizer = Optimizers.from_name(args.optimizer)
     if args.optimizer == "random-forest-custom":
@@ -563,19 +586,11 @@ def read_input(fname: str, args: NS) -> NPSamples:
     return np.array(X)
 
 
-def peak_time(args: NS) -> float:
+def peak_time(graph: Graph, args: NS) -> float:
     if not args.execute:
         return 0
-    flops = args.peak_flops
-    if flops is None:
-        dtype = DTYPES_MAP[args.dtype]
-        flops = HostRuntime.get().evaluate_flops(dtype)
-        assert flops != 0, f"unable to evaluate machine flops for type {dtype}"
-        logger.debug(f"Estimated peak flops: %g", flops)
-    dims_names = OPERATORS[args.operator]["dims"]
-    dims_map = {k: v for k, v in zip(dims_names, args.dims)}
-    flop = mulall([d for k, d in dims_map.items() if k.lower() == k])
-    time = flop / flops / args.threads
+    ops_count = graph.ops_count()
+    time = ops_count / args.peak_flops / args.threads
     return time
 
 
@@ -631,7 +646,59 @@ def write_run_manifest(args: NS, strategy: Strategy) -> None:
         metadata_file.write("\n")
 
 
-class CSVCallback:
+class ResultCallBack(ABC):
+    @abstractmethod
+    def __call__(self, result: Sequence) -> None: ...
+
+
+from xtc.cli.query_results import ResultsDB
+
+
+class DBCallback(ResultCallBack):
+    def __init__(
+        self,
+        dbfile: str,
+        target: str,
+        threads: int,
+        strategy: str,
+    ) -> None:
+        self._dbfile = dbfile
+        self._target = target
+        self._threads = threads
+        self._version = ResultsDB.get_version()
+        self._platform = ResultsDB.get_native_platform()
+        self._operator: list[Any] | None = None
+        self._strategy = ResultsDB.get_strategy(strategy)
+
+    def set_graph(self, graph: Graph):
+        # assert len(graph.nodes) == 1, f"Only support recording of single node graph"
+        # self._operator = ["xtc.operator", *signature]
+        self._operator = ResultsDB.get_operator(graph)
+
+    def _write_result(self, result: Sequence) -> None:
+        x, code, time, backend = result
+        if code != 0:
+            time = 0
+        compiler = ResultsDB.get_compiler(self._target, self._threads, backend)
+        log = dict(
+            version=self._version,
+            platform=self._platform,
+            compiler=compiler,
+            operator=self._operator,
+            strategy=self._strategy,
+            schedule=list(x),
+            results=[int(code), [float(time)]],
+        )
+        log_json = json.dumps(log)
+        with open(self._dbfile, "a") as outf:
+            print(log_json, flush=True, file=outf)
+
+    @override
+    def __call__(self, result: Sequence) -> None:
+        self._write_result(result)
+
+
+class CSVCallback(ResultCallBack):
     def __init__(
         self,
         fname: str,
@@ -718,11 +785,37 @@ class CSVCallback:
         self._write_row(row)
         self._seen_keys.add(key)
 
+    @override
     def __call__(self, result: Sequence) -> None:
         self._write_result(result)
 
     def __del__(self) -> None:
         self._outf.close()
+
+
+def get_result_callbacks(
+    strategy: Strategy, graph: Graph, args: NS
+) -> list[ResultCallBack]:
+    ptime = peak_time(graph, args)
+    sample_names = strategy.sample_names
+    args.csv_callback = CSVCallback(
+        args.output,
+        ptime,
+        sample_names,
+        resume=args.resume,
+        append=args.append,
+    )
+    callbacks: list[ResultCallBack] = [args.csv_callback]
+    if args.db_file:
+        args.db_callback = DBCallback(
+            args.db_file,
+            "native",
+            args.threads,
+            get_strategy_name(args.strategy),
+        )
+        args.db_callback.set_graph(graph)  # TODO: fix, not really clean
+        callbacks.append(args.db_callback)
+    return callbacks
 
 
 def search_some(strategy: Strategy, graph: Graph, args: NS):
@@ -733,19 +826,11 @@ def search_some(strategy: Strategy, graph: Graph, args: NS):
         ncomp_per_job,
         nexec_per_job,
         args.quiet,
-        args.operator,
+        graph.name,
     )
-    ptime = peak_time(args)
-    sample_names = strategy.sample_names
-    result_callback = CSVCallback(
-        args.output,
-        ptime,
-        sample_names,
-        resume=args.resume,
-        append=args.append,
-    )
+    result_callbacks = get_result_callbacks(strategy, graph, args)
     callbacks = {
-        "result": result_callback,
+        "result": result_callbacks,
         "search": search_callback,
     }
     if args.search == "iterative":
@@ -753,8 +838,9 @@ def search_some(strategy: Strategy, graph: Graph, args: NS):
             ncomp_per_job,
             nexec_per_job,
             args.quiet,
-            args.operator,
+            graph.name,
         )
+        ptime = peak_time(graph, args)
         evaluate_iterative(strategy, graph, args, callbacks=callbacks, peak_time=ptime)
     elif args.search in ["exhaustive", "random"]:
         evaluate_generate(
@@ -776,10 +862,11 @@ def search_some(strategy: Strategy, graph: Graph, args: NS):
 
 
 def optimize(args: NS):
-    dims = args.dims
-    dtype = args.dtype
-    op_args = (*dims, dtype)
-    graph = OPERATORS[args.operator]["operation"](*op_args, name=args.func_name)
+    if args.operator:
+        op_args = (*args.dims, args.dtype)
+        graph = OPERATORS[args.operator]["operation"](*op_args, name=args.func_name)
+    else:
+        graph = xtc_load_graph(args.graph_file)
     strategy = get_strategy(graph, args)
     write_run_manifest(args, strategy)
     if args.save_temps:
@@ -794,38 +881,35 @@ def optimize(args: NS):
             ncomp_per_job,
             nexec_per_job,
             args.quiet,
-            args.operator,
+            graph.name,
         )
-        ptime = peak_time(args)
-        sample_names = strategy.sample_names
-        result_callback = CSVCallback(
-            args.output,
-            ptime,
-            sample_names,
-            resume=args.resume,
-            append=args.append,
-        )
+        result_callbacks = get_result_callbacks(strategy, graph, args)
         callbacks = {
-            "result": result_callback,
+            "result": result_callbacks,
             "search": search_callback,
         }
         evaluate_sample(strategy, schedule, graph, args, callbacks=callbacks)
-        for row in result_callback._rows:
-            in_x, time, peak, backend = row[-4:]
-            tqdm.write(
-                f"Schedule: {backend}: {in_x}: time: {time * 1000:.2f} msecs, peak perf: {peak * 100:.2f}%"
-            )
     else:
         search_some(strategy, graph, args)
+    if not args.quiet and len(args.csv_callback._rows) > 0:
+        ordered = sorted(args.csv_callback._rows, key=lambda x: x[-3])
+        in_x, time, peak, backend = ordered[0][-4:]
+        tqdm.write(
+            f"Schedule: {backend}: {in_x}: time: {time * 1000:.2f} msecs, peak perf: {peak * 100:.2f}%"
+        )
 
 
-def get_strategy(graph: Graph, args: NS) -> Strategy:
+def get_strategy_name(strategy: str) -> str:
     def strat_name(name: str) -> str:
         alias = STRATEGIES_ALIASES.get(name)
         if alias is None:
             return name
         return strat_name(alias)
 
+    return strat_name(strategy)
+
+
+def get_strategy(graph: Graph, args: NS) -> Strategy:
     if args.descript:
         try:
             from xtc.search.strategies import Strategy_Descript_Explore
@@ -836,11 +920,10 @@ def get_strategy(graph: Graph, args: NS) -> Strategy:
         except ModuleNotFoundError:
             raise Exception("Descript requires the xvs sampler to be installed.")
 
-    name = strat_name(args.strategy)
+    name = get_strategy_name(args.strategy)
     options = dict(
         threads=args.threads,
-        max_unroll=args.max_unroll,
-        vec_size=VEC_SIZE,
+        **(dict(max_unroll=args.max_unroll) if args.max_unroll is not None else {}),
     )
     strat_args = name.split(":")
     if len(strat_args) > 1:
@@ -852,8 +935,6 @@ def get_strategy(graph: Graph, args: NS) -> Strategy:
 
 
 HOME = os.environ.get("HOME", "")
-
-THREADS = None
 
 DTYPES_MAP = {
     "f32": "float32",
@@ -932,10 +1013,14 @@ STRATEGIES_ALIASES = {
     "tile7d": "tile_pprprp",
     "tile7dv": "tile_pprprp_v",
     "tile7dvr": "tile_pprprp_vr",
-    # legacy: tile8d* for matmul is same as PPRRPRP*
+    # legacy: tile8d* for matmul is same as PPWRPRP*
     "tile8d": "tile_ppwrprp",
     "tile8dv": "tile_ppwrprp_v",
     "tile8dvr": "tile_ppwrprp_vr",
+    # legacy: tile9d* for matmul is same as PFPWRPRP*
+    "tile9d": "tile_pfpwrprp",
+    "tile9dv": "tile_pfpwrprp_v",
+    "tile9dvr": "tile_pfpwrprp_vr",
 }
 
 STRATEGIES_CLASSES = {
@@ -957,22 +1042,47 @@ def list_operations_dims(operator: str):
 
 
 def setup_args(args: NS):
-    global THREADS
-    global MAX_UNROLL
-    global VEC_SIZE
-    THREADS = args.threads
-    MAX_UNROLL = args.max_unroll
-    VEC_SIZE = 16
+    if args.graph_file is not None:
+        args.operator = None
 
     if "tvm" in args.backends:
         os.environ["TVM_NUM_THREADS"] = str(args.threads)
 
-    if args.eval == "eval" and args.execute:
-        args.eval_parameters = get_eval_parameters(args)
-
     # Workaround to ensure that TVM backend is after MLIR backends,
     # otherwise the import of tvm breaks the MLIR python bindings
     args.backends = sorted(args.backends)
+
+    if not args.func_name:
+        args.func_name = args.operator
+    if args.operator:
+        for backend in args.backends:
+            assert backend in OPERATORS[args.operator]["backends"], (
+                f"backend {backend} not available for operator {args.operator}"
+            )
+
+        if not args.strategy:
+            args.strategy = OPERATORS[args.operator]["default_strategy"]
+        if not args.dims:
+            args.dims = OPERATORS[args.operator]["default_dims"]
+        if not args.dtype:
+            args.dtype = OPERATORS[args.operator]["default_type"]
+        if args.op_name:
+            args.dims = get_operation_dims(args.operator, args.op_name)
+        if args.eval == "eval" and args.execute:
+            args.eval_parameters = get_eval_parameters(args)
+    else:
+        if not args.strategy:
+            args.strategy = "tile_oo"
+        args.dims = None
+        args.eval_parameters = None
+
+    if args.execute and args.peak_flops is None:
+        dtype = DTYPES_MAP[args.dtype]
+        args.peak_flops = HostRuntime.get().evaluate_flops(dtype)
+        assert args.peak_flops != 0, (
+            f"unable to evaluate machine flops for type {dtype}"
+        )
+        logger.debug(f"Estimated peak flops: %g", args.peak_flops)
 
 
 def launch_child(argv: Sequence[str], args: NS):
@@ -1007,7 +1117,6 @@ def main():
     default_op = "matmul"
     default_dtype = OPERATORS[default_op]["default_type"]
     default_jobs = max(1, multiprocessing.cpu_count() // 2)
-    default_unroll = 512
     choice_strategies = list(Strategies.names()) + list(STRATEGIES_ALIASES.keys())
     parser = argparse.ArgumentParser(
         description="Autotune Operator",
@@ -1019,6 +1128,11 @@ def main():
         choices=list(OPERATORS.keys()),
         default=default_op,
         help="operator to optimize",
+    )
+    parser.add_argument(
+        "--graph-file",
+        type=str,
+        help="Graph file",
     )
     parser.add_argument(
         "--op-name", type=str, help="operation name to optimize from the registry"
@@ -1092,12 +1206,16 @@ def main():
     parser.add_argument(
         "--max-unroll",
         type=int,
-        default=default_unroll,
-        help="max unroll in tiling strategies",
+        help="max unroll in tiling strategies, or strategy default",
     )
     parser.add_argument("--seed", type=int, default=0, help="seed")
     parser.add_argument(
         "--output", type=str, default="results.csv", help="output csv file for search"
+    )
+    parser.add_argument(
+        "--db-file",
+        type=str,
+        help="output json db, for instance: xtc-graphs-db.json",
     )
     parser.add_argument(
         "--resume",
@@ -1207,25 +1325,9 @@ def main():
     if not args.child:
         launch_child(sys.argv, args)
 
-    if not args.func_name:
-        args.func_name = args.operator
-    if not args.strategy:
-        args.strategy = OPERATORS[args.operator]["default_strategy"]
-    if not args.dims:
-        args.dims = OPERATORS[args.operator]["default_dims"]
-    if not args.dtype:
-        args.dtype = OPERATORS[args.operator]["default_type"]
-    if args.op_name:
-        args.dims = get_operation_dims(args.operator, args.op_name)
-
     if args.ops_list:
         list_operations_dims(args.operator)
         raise SystemExit()
-
-    for backend in args.backends:
-        assert backend in OPERATORS[args.operator]["backends"], (
-            f"backend {backend} not available for operator {args.operator}"
-        )
 
     if args.seed >= 0:
         np.random.seed(args.seed)

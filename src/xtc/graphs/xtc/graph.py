@@ -185,3 +185,21 @@ class XTCGraph(Graph):
         file_name.parent.mkdir(exist_ok=True, parents=True)
         with open(file_name, "w") as f:
             yaml_dump(self.to_dict(), f, sort_keys=False)
+
+    @override
+    def ops_count(self) -> int:
+        dtype = self.ops_dtype()
+        # Estimated as the sum of ops counts of all nodes
+        ops_count = sum(
+            [
+                node.operation.ops_count
+                for node in self._nodes
+                if node.operation.ops_dtype == dtype
+            ]
+        )
+        return ops_count
+
+    @override
+    def ops_dtype(self) -> str:
+        # Estimated as the dtype of the first operation
+        return self._nodes[0].operation.ops_dtype if len(self._nodes) > 0 else "float32"
