@@ -112,30 +112,30 @@ def xtc_conv2d_graph(
     return gb.graph
 
 
-def tvm_impl(graph: Graph) -> tuple[Backend, str]:
+def tvm_impl(graph: Graph, **kwargs: Any) -> tuple[Backend, str]:
     from xtc.backends.tvm import Backend
 
     impl = Backend(graph)
     return impl, "tvm"
 
 
-def jir_impl(graph: Graph) -> tuple[Backend, str]:
+def jir_impl(graph: Graph, **kwargs: Any) -> tuple[Backend, str]:
     from xtc.backends.jir import Backend
 
     impl = Backend(graph)
     return impl, "jir"
 
 
-def mlir_impl(graph: Graph) -> tuple[Backend, str]:
+def mlir_impl(graph: Graph, **kwargs: Any) -> tuple[Backend, str]:
     from xtc.backends.mlir import Backend
 
-    impl = Backend(graph)
+    impl = Backend(graph, use_tensor_dialect=kwargs.get("use_tensors", False))
     return impl, "mlir"
 
 
-def graph_implementer(graph: Graph, backend: str) -> tuple[Backend, str]:
+def graph_implementer(graph: Graph, backend: str, **kwargs: Any) -> tuple[Backend, str]:
     module = import_module(f"xtc.backends.{backend}")
-    impl = module.Backend(graph)
+    impl = module.Backend(graph, use_tensor_dialect=kwargs.get("use_tensors", False))
     return impl, backend
 
 
@@ -204,9 +204,11 @@ def compile_one(
     logger.debug("Compile: %s: %s: %s...", ident, backend, in_x)
     if args.operator:
         implementer = OPERATORS[args.operator]["backends"][backend]["implementer"]
-        impl, backend_name = implementer(graph)
+        impl, backend_name = implementer(graph, use_tensors=args.use_tensors)
     else:
-        impl, backend_name = graph_implementer(graph, backend)
+        impl, backend_name = graph_implementer(
+            graph, backend, use_tensors=args.use_tensors
+        )
     assert backend_name == backend
     scheduler = impl.get_scheduler()
     node_scheduler = scheduler  # by default the output node is scheduled
@@ -221,11 +223,14 @@ def compile_one(
         bare_ptr=args.bare_ptr,
         debug=args.debug_compile,
     )
+    if args.use_tensors:
+        compile_args["using_tensors_hint"] = True
     if args.dump:
         compile_args.update(
             dict(
                 print_source_ir=True,
                 print_transformed_ir=True,
+                print_bufferization_ir=args.use_tensors,
                 print_lowered_ir=True,
                 print_assembly=True,
                 color=False,
@@ -1282,6 +1287,12 @@ def main():
     )
     parser.add_argument(
         "--mlir-prefix", type=str, help="MLIR install prefix, defaults to mlir package"
+    )
+    parser.add_argument(
+        "--use-tensors",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="use tensors instead of memref for the mlir backend",
     )
     parser.add_argument("--batch", type=int, default=1, help="batch size for optimizer")
     parser.add_argument(

@@ -655,8 +655,6 @@ def apply_bufferization_passes(mlir_program: RawMlirProgram):
             "cse",
             "eliminate-empty-tensors",  # causes ops to write directly to out buffer
             f"one-shot-bufferize{{{' '.join(bufferize_options)}}}",
-            # "func.func(buffer-hoisting)",
-            # "func.func(buffer-loop-hoisting)",
             "drop-equivalent-buffer-results",
             "func.func(promote-buffers-to-stack)",
         ]
