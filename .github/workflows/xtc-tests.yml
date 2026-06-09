@@ -97,6 +97,7 @@ jobs:
           flags: py${{ matrix.python-version }}-${{ matrix.os }}
           name: py${{ matrix.python-version }}-${{ matrix.os }}
           token: ${{ secrets.CODECOV_TOKEN }}
+          skip_validation: true
           fail_ci_if_error: true
 
   pr-build:
