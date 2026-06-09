@@ -69,12 +69,16 @@ jobs:
       - name: Run Explore One Shot
         run: |
           COV=scripts/coverage/coverage_run.sh
-          env STRATEGIES=tile8dvr BACKENDS="tvm mlir" $COV ./scripts/explore/run-explore-one-shot.sh artifacts/explore
+          env STRATEGIES=tile8dvr BACKENDS="tvm mlir" $COV ./scripts/explore/run-explore-one-shot.sh artifacts/explore-one-shot
       - name: Run Explore Variants
         run: |
           COV=scripts/coverage/coverage_run.sh
-          env STRATEGIES=tile8dvr BACKENDS="tvm mlir" $COV ./scripts/explore/run-explore-variants.sh artifacts/explore
+          env STRATEGIES=tile8dvr BACKENDS="tvm mlir" $COV ./scripts/explore/run-explore-variants.sh artifacts/explore-variants
           env NOSHOW=1 scripts/explore/display-explore-variants.sh artifacts/explore
+      - name: Run Explore Optimizers
+        run: |
+          COV=scripts/coverage/coverage_run.sh
+          env TRIALS=20 BATCH=4 SEEDS="1 2 3" scripts/explore/run-explore-optimizers.sh artifacts/explore-optimizers
       - name: Generate Coverage Reports
         run: |
           coverage combine >/dev/null
