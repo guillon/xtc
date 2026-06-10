@@ -99,18 +99,32 @@ def _(mo):
         if display_results_fn is not None:
             namespace["display_results"] = _display_results
 
+        success, output = execute_code(editor_value, namespace=namespace)
+        return success, output, captured
+
+    def execute_code(code_str: str, namespace: dict[str, Any]|None = None):
+        """
+        Execute code with stdout/stderr capture.
+        Returns (success, output).
+        The given namespace will be modified inplace as in exec().
+        """
+        if namespace is None:
+            namespace = {}
+
         code_stderr = StringIO()
         code_stdout = StringIO()
 
         try:
             with redirect_stderr(code_stderr), redirect_stdout(code_stdout):
-                exec(editor_value, namespace)
+                exec(code_str, namespace)
             success, output = True, code_stderr.getvalue() + code_stdout.getvalue()
         except Exception:
             success, output = False, traceback.format_exc()
         if not mo.running_in_notebook():
-            print(f"Executed: {success}, {captured}: {output}")
-        return success, output, captured
+            print(f"Executed: {success}: {output}")
+            if not success:
+                raise RuntimeError("error executing code")
+        return success, output
 
     def render_editor_output(success: bool, output: str, captured: dict):
         """Render the output of an editor execution as marimo elements."""
@@ -264,6 +278,7 @@ def _(mo):
         create_backend_radio,
         create_output_radio,
         execute_editor_code,
+        execute_code,
         render_editor_output,
         run_exploration,
         traceback,
@@ -818,16 +833,14 @@ results = run_exploration(explore(), get_info)
     return explore_schedules_code, run_explore_button
 
 @app.cell
-def _(explore_schedules_code, run_explore_button, mo, run_exploration, traceback):
+def _(explore_schedules_code, run_explore_button, mo, run_exploration, execute_code):
     if mo.running_in_notebook():
         mo.stop(not run_explore_button.value, mo.md("*Click 'Run exploration' to execute the code.*"))
 
     # Execute the user's code with run_exploration available
     _namespace = {"run_exploration": run_exploration}
-    try:
-        exec(explore_schedules_code.value, _namespace)
-    except Exception:
-        mo.stop(True, mo.md(f"**Code error:**\n```\n{traceback.format_exc()}\n```"))
+    _success, _output = execute_code(explore_schedules_code.value, namespace=_namespace)
+    mo.stop(not _success, mo.md(f"**Code error:**\n```\n{_output}\n```"))
 
     _results, _captured_info = _namespace.get("results", ([], {}))
 
@@ -1014,16 +1027,14 @@ results = run_exploration(explore(), get_info)
     return strategy_editor, run_strategy_button
 
 @app.cell
-def _(strategy_editor, run_strategy_button, mo, run_exploration, traceback):
+def _(strategy_editor, run_strategy_button, mo, run_exploration, execute_code):
     if mo.running_in_notebook():
         mo.stop(not run_strategy_button.value, mo.md("*Click 'Run strategy exploration' to execute the code.*"))
 
     # Execute the user's code with run_exploration available
     _namespace = {"run_exploration": run_exploration}
-    try:
-        exec(strategy_editor.value, _namespace)
-    except Exception:
-        mo.stop(True, mo.md(f"**Code error:**\n```\n{traceback.format_exc()}\n```"))
+    _success, _output = execute_code(strategy_editor.value, namespace=_namespace)
+    mo.stop(not _success, mo.md(f"**Code error:**\n```\n{_output}\n```"))
 
     _results, _captured_info = _namespace.get("results", ([], {}))
 
