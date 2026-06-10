@@ -637,7 +637,7 @@ scheduler = backend.get_scheduler()
 descript_scheduler(
    scheduler=scheduler,
    node_name="C",
-   abstract_axis=["i", "j", "k"],
+   abstract_dims=["i", "j", "k"],
    spec=schedule_spec
 )
 schedule = scheduler.schedule()
@@ -745,7 +745,7 @@ def apply_schedule(graph, backend_cls, spec):
    descript_scheduler(
          scheduler=scheduler,
          node_name="C",
-         abstract_axis=["i", "j", "k"],
+         abstract_dims=["i", "j", "k"],
          spec=spec
    )
    schedule = scheduler.schedule()
@@ -1077,22 +1077,25 @@ def _(mo):
         value=
 '''# Run numpy matmul and collect elapsed time
 import timeit
+from threadpoolctl import threadpool_limits
 import numpy as np
 from xtc.runtimes.host import HostRuntime
+
+cores = 4    # set to a requested number of core
 
 rt = HostRuntime.get()
 
 I, J, K, dtype = 1024, 1024, 1024, "float32"
 
-cores = 4    # set to an estimated number of core
-peak_flops = cores * rt.evaluate_flops(dtype, threads=cores)
+peak_flops = cores * rt.evaluate_flops(dtype)
 
 A = np.random.rand(I, K).astype(dtype)
 B = np.random.rand(K, J).astype(dtype)
 C = np.empty((I, J), dtype=dtype)
 
-number = 5
-elapsed = timeit.timeit(lambda: np.matmul(A, B, C), number=number)/number
+number = 10
+with threadpool_limits(limits=cores):
+   elapsed = timeit.timeit(lambda: np.matmul(A, B, C), number=number)/number
 perf = (I * J * K) / elapsed / peak_flops * 100
 print(f"numpy perf: {perf}%")''',
         language="python",
@@ -1112,7 +1115,7 @@ def _(numpy_editor, execute_editor_code, mo):
 def _(mo):
     mo.md(r"""
     Generally on a 4 cores architecture, the computed `numpy perf` should be
-    around 50-70% of the peak parallel performance.
+    around 80% of the peak parallel performance.
 
     You may use the sandbox below or develop on your own editor to generate an
     XTC schedule which is at least as good as this result.
