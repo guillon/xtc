@@ -7,7 +7,14 @@ app = marimo.App()
 @app.cell
 def _():
     import marimo as mo
-    return (mo,)
+    import argparse
+
+    args = argparse.Namespace()
+    if not mo.running_in_notebook():
+        parser = argparse.ArgumentParser("Test notebook from CLI")
+        args = parser.parse_args()
+
+    return (mo, args)
 
 @app.cell
 def _(mo):
@@ -98,10 +105,12 @@ def _(mo):
         try:
             with redirect_stderr(code_stderr), redirect_stdout(code_stdout):
                 exec(editor_value, namespace)
-            output = code_stderr.getvalue() + code_stdout.getvalue()
-            return True, output, captured
+            success, output = True, code_stderr.getvalue() + code_stdout.getvalue()
         except Exception:
-            return False, traceback.format_exc(), captured
+            success, output = False, traceback.format_exc()
+        if not mo.running_in_notebook():
+            print(f"Executed: {success}, {captured}: {output}")
+        return success, output, captured
 
     def render_editor_output(success: bool, output: str, captured: dict):
         """Render the output of an editor execution as marimo elements."""
@@ -195,6 +204,9 @@ def _(mo):
                     )
                     last = now
 
+            def emit(out: str):
+                buf.append(out)
+
             try:
                 out.replace(mo.md("**Output:**\n\n```text\n\n```"))
                 render(force=True)
@@ -202,7 +214,7 @@ def _(mo):
                 while True:
                     # Cancel requested? (cell invalidated by Cancel click / rerun / interrupt)
                     if thread.should_exit:
-                        buf.append("\n[Cancelled]\n")
+                        emit("\n[Cancelled]\n")
                         render(force=True)
                         if p.is_alive():
                             p.terminate()
@@ -218,7 +230,7 @@ def _(mo):
                             except queue.Empty:
                                 break
                             if kind == "chunk":
-                                buf.append(payload)
+                                emit(payload)
                         render(force=True)
                         break
 
@@ -229,7 +241,7 @@ def _(mo):
                         continue
 
                     if kind == "chunk":
-                        buf.append(payload)
+                        emit(payload)
                         render()
                     elif kind == "done":
                         # allow loop to observe process exit / drain remaining data
@@ -807,7 +819,8 @@ results = run_exploration(explore(), get_info)
 
 @app.cell
 def _(explore_schedules_code, run_explore_button, mo, run_exploration, traceback):
-    mo.stop(not run_explore_button.value, mo.md("*Click 'Run exploration' to execute the code.*"))
+    if mo.running_in_notebook():
+        mo.stop(not run_explore_button.value, mo.md("*Click 'Run exploration' to execute the code.*"))
 
     # Execute the user's code with run_exploration available
     _namespace = {"run_exploration": run_exploration}
@@ -849,7 +862,10 @@ def _(explore_schedules_code, run_explore_button, mo, run_exploration, traceback
         f"#### Best configuration: **{_best['sample']}** ({_best['perf']:.2f}% of peak)",
     ])
 
-    mo.md("\n".join(_summary_lines))
+    _output = "\n".join(_summary_lines)
+    if not mo.running_in_notebook():
+        print(_output)
+    mo.md(_output)
 
 @app.cell(hide_code=True)
 def _(mo):
@@ -999,7 +1015,8 @@ results = run_exploration(explore(), get_info)
 
 @app.cell
 def _(strategy_editor, run_strategy_button, mo, run_exploration, traceback):
-    mo.stop(not run_strategy_button.value, mo.md("*Click 'Run strategy exploration' to execute the code.*"))
+    if mo.running_in_notebook():
+        mo.stop(not run_strategy_button.value, mo.md("*Click 'Run strategy exploration' to execute the code.*"))
 
     # Execute the user's code with run_exploration available
     _namespace = {"run_exploration": run_exploration}
@@ -1047,7 +1064,10 @@ def _(strategy_editor, run_strategy_button, mo, run_exploration, traceback):
         f"- **Performance:** {_best['perf']:.2f}% of peak",
     ])
 
-    mo.md("\n".join(_summary_lines))
+    _output = "\n".join(_summary_lines)
+    if not mo.running_in_notebook():
+        print(_output)
+    mo.md(_output)
 
 @app.cell(hide_code=True)
 def _(mo):
@@ -1177,7 +1197,8 @@ def _(mo, sandbox_editor, run, cancel, start_streaming_execution):
     if cancel.value:
         out.replace(mo.md("Cancelled (if something was running, it will stop)."))
     else:
-        mo.stop(not run.value, mo.md("*Click 'Run sandbox' to execute the code, and 'Stop execution' to cancel long runs.*"))
+        if mo.running_in_notebook():
+            mo.stop(not run.value, mo.md("*Click 'Run sandbox' to execute the code, and 'Stop execution' to cancel long runs.*"))
         # Start background execution. It will keep streaming until done or cancelled.
         start_streaming_execution(code=sandbox_editor.value, out=out, throttle_s=0.05)
     return
