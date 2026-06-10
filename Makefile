@@ -66,6 +66,7 @@ check-pytest:
 
 check-tutorials:
 	scripts/tutorials/test_tutorial_explore_optimizers.sh
+	scripts/tutorials/test_tutorial_xtc_101.sh
 
 format-ruff:
 	scripts/ruff/format.sh

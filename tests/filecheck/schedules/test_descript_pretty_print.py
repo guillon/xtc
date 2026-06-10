@@ -11,8 +11,8 @@ from xtc.schedules.parsing import ScheduleParser
 from xtc.schedules.descript import ScheduleInterpreter
 
 parser = ScheduleParser()
-abstract_axis = ["i", "j", "k"]
-interpreter = ScheduleInterpreter(abstract_axis)
+abstract_dims = ["i", "j", "k"]
+interpreter = ScheduleInterpreter(abstract_dims)
 
 if "--simple" in sys.argv:
     spec = {"i": {}, "k": {}, "j": {}}
