@@ -228,8 +228,8 @@ class XTCTensor(Tensor):
             data = self._data.reshape((-1,))
             if len(data) > 8:
                 data_str = (
-                    f"{' '.join([f'{d:g}' for d in data[:4]])}..."
-                    f"{' '.join([f'{d:g}' for d in data[-4:]])}"
+                    f"{' '.join([f'{d:.4g}' for d in data[:4]])}..."
+                    f"{' '.join([f'{d:.4g}' for d in data[-4:]])}"
                 )
             else:
                 data_str = f"{' '.join([f'{d:g}' for d in data])}"
