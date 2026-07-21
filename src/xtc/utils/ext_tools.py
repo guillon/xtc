@@ -58,9 +58,9 @@ llc_opts = [
     "-filetype=obj",
 ]
 
-opt_opts = ["-O3", "--enable-unsafe-fp-math", "--fp-contract=fast"]
+opt_opts = ["-O3", "--fp-contract=fast"]
 
-target_cc_opts = ["-O3", "-ffast-math", "-ffp-contract=fast"]
+target_cc_opts = ["-O3", "-ffp-contract=fast"]
 
 cc_opts = ["-O3", "-march=native"]
 
