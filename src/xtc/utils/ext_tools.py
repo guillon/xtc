@@ -54,11 +54,11 @@ mlirtranslate_opts = ["--mlir-to-llvmir"]
 xtctranslate_opts = ["--mlir-to-c"]
 
 llc_opts = [
-    "-O3",
+    "-O2",
     "-filetype=obj",
 ]
 
-opt_opts = ["-O3", "--fp-contract=fast"]
+opt_opts = ["-O2", "--fp-contract=fast"]
 
 target_cc_opts = ["-O3", "-ffp-contract=fast"]
 
