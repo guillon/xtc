@@ -28,7 +28,8 @@ sch = impl.get_scheduler()
 sch.set_dims(["I", "J", "K"])
 sch.tile("I", {"I0": 2})
 sch.tile("J", {"J0": 16})
-sch.interchange(["K", "I", "J", "I0", "J0"])
+sch.tile("K", {"K0": 32})
+sch.interchange(["J", "K", "I", "K0", "I0", "J0"])
 sch.unroll({"I0": 2})
 sch.vectorize(["J0"])
 if "--tvm" in sys.argv:
@@ -38,19 +39,21 @@ if "--tvm" in sys.argv:
 loop_nest = sch.get_loop_nest()
 print(loop_nest.root_node.pretty_print())
 
-# CHECK-MLIR:      loop K
-# CHECK-MLIR-NEXT:   loop I
-# CHECK-MLIR-NEXT:     loop J
-# CHECK-MLIR-NEXT:       tile(I, 2)  // unroll(2)
-# CHECK-MLIR-NEXT:         tile(J, 16)  // vectorized
-# CHECK-MLIR-NEXT:           ...
+# CHECK-MLIR:      loop J
+# CHECK-MLIR-NEXT:   loop K
+# CHECK-MLIR-NEXT:     loop I
+# CHECK-MLIR-NEXT:       tile(K, 32)
+# CHECK-MLIR-NEXT:         tile(I, 2)  // unroll(2)
+# CHECK-MLIR-NEXT:           tile(J, 16)  // vectorized
+# CHECK-MLIR-NEXT:             ...
 
-# CHECK-TVM:      loop K
-# CHECK-TVM-NEXT:   loop I  // pack(0, pad)
-# CHECK-TVM-NEXT:     loop J  // buffer
-# CHECK-TVM-NEXT:       tile(I, 2)  // unroll(2)
-# CHECK-TVM-NEXT:         tile(J, 16)  // vectorized
-# CHECK-TVM-NEXT:           ...
+# CHECK-TVM:      loop J // buffer
+# CHECK-TVM-NEXT:   loop K
+# CHECK-TVM-NEXT:     loop I  // pack(0, pad)
+# CHECK-TVM-NEXT:       tile(K, 32)
+# CHECK-TVM-NEXT:         tile(I, 2)  // unroll(2)
+# CHECK-TVM-NEXT:           tile(J, 16)  // vectorized
+# CHECK-TVM-NEXT:             ...
 
 # Test with split (MLIR only - TVM does not support split)
 if "--mlir" in sys.argv:
