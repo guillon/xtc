@@ -10,7 +10,8 @@ a = O.tensor((I, K), dtype, name="A")
 b = O.tensor((K, J), dtype, name="B")
 
 with O.graph(name="matmul") as gb:
-    O.matmul(a, b, name="C")
+    p = O.relu(a, name="relu")
+    O.matmul(p, b, name="C")
 
 graph = gb.graph
 
@@ -22,7 +23,7 @@ elif "--tvm" in sys.argv:
 
 else:
     assert False
-    
+
 impl = Backend(graph)
 sch = impl.get_scheduler()
 sch.set_dims(["I", "J", "K"])
@@ -35,6 +36,7 @@ sch.vectorize(["J0"])
 if "--tvm" in sys.argv:
     sch.buffer_at("J")
     sch.pack_at("I", 0, pad=True)
+    sch.fuse_producer_at("K", 0)
 
 loop_nest = sch.get_loop_nest()
 print(loop_nest.root_node.pretty_print())
@@ -48,7 +50,7 @@ print(loop_nest.root_node.pretty_print())
 # CHECK-MLIR-NEXT:             ...
 
 # CHECK-TVM:      loop J // buffer
-# CHECK-TVM-NEXT:   loop K
+# CHECK-TVM-NEXT:   loop K  // fuse_producer(0)
 # CHECK-TVM-NEXT:     loop I  // pack(0, pad)
 # CHECK-TVM-NEXT:       tile(K, 32)
 # CHECK-TVM-NEXT:         tile(I, 2)  // unroll(2)
