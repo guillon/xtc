@@ -407,12 +407,78 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
                 file=outf,
             )
 
+    @classmethod
+    def _update_loopnest_for_codegen(cls, sched: LoopNest):
+        def _update_loopnode(node: LoopNestNode) -> LoopNestNode:
+            adjusted_tiles = {}
+            adjusted_unrolling = {
+                k: v for k, v in node.unroll.items() if k not in node.vectorize
+            }
+            adjusted_unrolls = list(adjusted_unrolling)
+            adjusted_vectorization = node.vectorize[:]
+            adjusted_permutation = node.interchange[:]
+            for dim, dim_tiles in node.tiles.items():
+                adjusted_dim_tiles = {}
+                for axis, size in dim_tiles.items():
+                    adjusted_dim_tiles.update({axis: size})
+                    if axis in adjusted_unrolling:
+                        assert axis not in adjusted_vectorization
+                        unroll = adjusted_unrolling[axis]
+                        if unroll < size:
+                            axis_idx = adjusted_unrolls.index(axis)
+                            new_axis = f"__u_{axis}"
+                            adjusted_dim_tiles.update({new_axis: unroll})
+                            adjusted_unrolls[axis_idx] = new_axis
+                            del adjusted_unrolling[axis]
+                            adjusted_unrolling.update({new_axis: unroll})
+                            adjusted_permutation.insert(
+                                adjusted_permutation.index(axis) + 1,
+                                new_axis,
+                            )
+                    elif axis in adjusted_vectorization:
+                        assert axis not in adjusted_unrolling
+                        pow2 = pow2divisor(size)
+                        unroll = size // pow2
+                        if unroll > 1:
+                            axis_idx = adjusted_vectorization.index(axis)
+                            new_axis = f"__v_{axis}"
+                            adjusted_dim_tiles.update({new_axis: pow2})
+                            adjusted_vectorization[axis_idx] = new_axis
+                            adjusted_unrolls.append(axis)
+                            adjusted_unrolling.update({axis: unroll})
+                            adjusted_permutation.insert(
+                                adjusted_permutation.index(axis) + 1,
+                                new_axis,
+                            )
+                adjusted_tiles[dim] = adjusted_dim_tiles
+            adjusted_unrolling = {u: adjusted_unrolling[u] for u in adjusted_unrolls}
+            return LoopNestNode(
+                root=node.root,
+                tiles=adjusted_tiles,
+                splits=deepcopy(node.splits),
+                interchange=adjusted_permutation,
+                vectorize=adjusted_vectorization,
+                parallelize=deepcopy(node.parallelize),
+                unroll=adjusted_unrolling,
+                buffer_at=deepcopy(node.buffer_at),
+                pack_at=deepcopy(node.pack_at),
+                fuse_producer_at=deepcopy(node.fuse_producer_at),
+                fuse_consumer_at=deepcopy(node.fuse_consumer_at),
+            )
+
+        root = sched.root_node
+        if root is not None:
+            root = _update_loopnode(root)
+        return LoopNest(
+            abstract_dims=sched.abstract_dims,
+            root_node=root,
+        )
+
     @override
     def emit(self, scheduler: "TVMScheduler"):
         sched = scheduler.get_loop_nest()
+        sched = self._update_loopnest_for_codegen(sched)
         sched.check()
-        # TODO: First adjust schedule to fix code gen limitations before emit
-        # sched = self._update_schedule_for_codegen(sched)
         self._dump_schedule(sched)
 
 
@@ -612,11 +678,11 @@ class TVMScheduler(itf.schd.Scheduler):
     def _get_plain_schedule(self) -> TVMPlainSchedule:
         return TVMPlainSchedule(
             dims=deepcopy(self.dims),
-            tiles=self.tiles,
-            permutation=self.permutation,
+            tiles=deepcopy(self.tiles),
+            permutation=deepcopy(self.permutation),
             parallelization=deepcopy(self.parallelization),
-            unrolling=self.unrolling,
-            vectorization=self.vectorization,
+            unrolling=deepcopy(self.unrolling),
+            vectorization=deepcopy(self.vectorization),
             write_caches=deepcopy(self.write_caches),
             read_buffers=deepcopy(self.read_buffers),
             fused=deepcopy(self.fused),

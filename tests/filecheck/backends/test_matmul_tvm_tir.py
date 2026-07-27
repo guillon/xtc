@@ -4,7 +4,7 @@
 import xtc.graphs.xtc.op as O
 from xtc.backends.tvm import Backend
 
-I, J, K, dtype = 64, 64, 64, "float32"
+I, J, K, dtype = 64, 192, 256, "float32"
 a = O.tensor((I, K), dtype, name="A")
 b = O.tensor((K, J), dtype, name="B")
 
@@ -18,13 +18,13 @@ impl = Backend(graph, tir_schedule=True)
 
 sch = impl.get_scheduler()
 sch.tile("i", {"i1": 8, "i2": 4})
-sch.tile("j", {"j1": 32, "j2": 16})
+sch.tile("j", {"j1": 96, "j2": 48})
 sch.tile("k", {"k1": 16})
 sch.interchange(["i", "j", "k", "i1", "j1", "k1", "i2", "j2"])
 sch.buffer_at("j")
 sch.pack_at("k", 1, pad=True)
 sch.vectorize(["j2"])
-sch.unroll({"i2": 4})
+sch.unroll({"i2": 2})
 sch.parallelize(["i", "j"])
 sched = sch.schedule()
 
@@ -42,12 +42,12 @@ print(f"CODE: {res}")
 # CHECK:       graph:
 # CHECK-NEXT:    name: matmul
 # CHECK-NEXT:    inputs:
-# CHECK-NEXT:    - %0 : 64x64xfloat32
-# CHECK-NEXT:    - %1 : 64x64xfloat32
+# CHECK-NEXT:    - %0 : 64x256xfloat32
+# CHECK-NEXT:    - %1 : 256x192xfloat32
 # CHECK-NEXT:    outputs:
-# CHECK-NEXT:    - %2 : 64x64xfloat32
+# CHECK-NEXT:    - %2 : 64x192xfloat32
 # CHECK-NEXT:    nodes:
-# CHECK-NEXT:    - %2: matmul(%0, %1) {name = 'C'} : [64x64xfloat32, 64x64xfloat32] -> [64x64xfloat32]
+# CHECK-NEXT:    - %2: matmul(%0, %1) {name = 'C'} : [64x256xfloat32, 256x192xfloat32] -> [64x192xfloat32]
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tir as T
@@ -55,10 +55,10 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
 # CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def matmul(_0: T.Buffer((64, 64), "float32"), _1: T.Buffer((64, 64), "float32"), C: T.Buffer((64, 64), "float32")):
+# CHECK-NEXT:      def matmul(_0: T.Buffer((64, 256), "float32"), _1: T.Buffer((256, 192), "float32"), C: T.Buffer((64, 192), "float32")):
 # CHECK-NEXT:          T.func_attr({"tir.noalias": T.bool(True)})
 # CHECK-NEXT:          # with T.block("root"):
-# CHECK-NEXT:          for i, j, k in T.grid(64, 64, 64):
+# CHECK-NEXT:          for i, j, k in T.grid(64, 192, 256):
 # CHECK-NEXT:              with T.block("C"):
 # CHECK-NEXT:                  v_i, v_j, v_k = T.axis.remap("SSR", [i, j, k])
 # CHECK-NEXT:                  T.reads(_0[v_i, v_k], _1[v_k, v_j])
@@ -70,14 +70,15 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  i, j, k, = sch.get_loops(O)
 # CHECK-NEXT:  I_R1 = sch.cache_read(O, 1, "global")
 # CHECK-NEXT:  O_W0 = sch.cache_write(O, 0, "global")
-# CHECK-NEXT:  i, i1, i2, = sch.split(i, factors=[None, 2, 4])
-# CHECK-NEXT:  j, j1, j2, = sch.split(j, factors=[None, 2, 16])
+# CHECK-NEXT:  i, i1, i2, __u_i2, = sch.split(i, factors=[None, 4, 2, 2])
+# CHECK-NEXT:  j, j1, j2, __v_j2, = sch.split(j, factors=[None, 32, 3, 16])
 # CHECK-NEXT:  k, k1, = sch.split(k, factors=[None, 16])
-# CHECK-NEXT:  sch.reorder(i, j, k, i1, j1, k1, i2, j2)
+# CHECK-NEXT:  sch.reorder(i, j, k, i1, j1, k1, i2, __u_i2, j2, __v_j2)
 # CHECK-NEXT:  sch.reverse_compute_at(O_W0, j)
 # CHECK-NEXT:  sch.compute_at(I_R1, k)
-# CHECK-NEXT:  sch.unroll(i2)
-# CHECK-NEXT:  sch.vectorize(j2)
+# CHECK-NEXT:  sch.unroll(__u_i2)
+# CHECK-NEXT:  sch.unroll(j2)
+# CHECK-NEXT:  sch.vectorize(__v_j2)
 # CHECK-NEXT:  j = sch.fuse(i, j)
 # CHECK-NEXT:  sch.parallel(j)
 # CHECK-NEXT:  
@@ -87,36 +88,38 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
 # CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def matmul(_0: T.Buffer((64, 64), "float32"), _1: T.Buffer((64, 64), "float32"), C: T.Buffer((64, 64), "float32")):
+# CHECK-NEXT:      def matmul(_0: T.Buffer((64, 256), "float32"), _1: T.Buffer((256, 192), "float32"), C: T.Buffer((64, 192), "float32")):
 # CHECK-NEXT:          T.func_attr({"tir.noalias": T.bool(True)})
 # CHECK-NEXT:          # with T.block("root"):
-# CHECK-NEXT:          _1_global = T.alloc_buffer((64, 64))
-# CHECK-NEXT:          C_global = T.alloc_buffer((64, 64))
-# CHECK-NEXT:          for i_0_j_0_fused in T.parallel(16):
-# CHECK-NEXT:              for k_0 in range(4):
-# CHECK-NEXT:                  for ax0, ax1 in T.grid(16, 32):
+# CHECK-NEXT:          _1_global = T.alloc_buffer((256, 192))
+# CHECK-NEXT:          C_global = T.alloc_buffer((64, 192))
+# CHECK-NEXT:          for i_0_j_0_fused in T.parallel(4):
+# CHECK-NEXT:              for k_0 in range(16):
+# CHECK-NEXT:                  for ax0, ax1 in T.grid(16, 192):
 # CHECK-NEXT:                      with T.block("_1_global"):
-# CHECK-NEXT:                          v0 = T.axis.spatial(64, k_0 * 16 + ax0)
-# CHECK-NEXT:                          v1 = T.axis.spatial(64, i_0_j_0_fused % 2 * 32 + ax1)
+# CHECK-NEXT:                          v0 = T.axis.spatial(256, k_0 * 16 + ax0)
+# CHECK-NEXT:                          v1 = T.axis.spatial(192, ax1)
 # CHECK-NEXT:                          T.reads(_1[v0, v1])
 # CHECK-NEXT:                          T.writes(_1_global[v0, v1])
 # CHECK-NEXT:                          _1_global[v0, v1] = _1[v0, v1]
-# CHECK-NEXT:                  for i_1, j_1, k_1 in T.grid(2, 2, 16):
-# CHECK-NEXT:                      for i_2 in T.unroll(4):
-# CHECK-NEXT:                          for j_2 in T.vectorized(16):
-# CHECK-NEXT:                              with T.block("C"):
-# CHECK-NEXT:                                  v_i = T.axis.spatial(64, i_0_j_0_fused // 2 * 8 + i_1 * 4 + i_2)
-# CHECK-NEXT:                                  v_j = T.axis.spatial(64, i_0_j_0_fused % 2 * 32 + j_1 * 16 + j_2)
-# CHECK-NEXT:                                  v_k = T.axis.reduce(64, k_0 * 16 + k_1)
-# CHECK-NEXT:                                  T.reads(_0[v_i, v_k], _1_global[v_k, v_j])
-# CHECK-NEXT:                                  T.writes(C_global[v_i, v_j])
-# CHECK-NEXT:                                  with T.init():
-# CHECK-NEXT:                                      C_global[v_i, v_j] = T.float32(0.0)
-# CHECK-NEXT:                                  C_global[v_i, v_j] = C_global[v_i, v_j] + _0[v_i, v_k] * _1_global[v_k, v_j]
-# CHECK-NEXT:              for ax0, ax1 in T.grid(8, 32):
+# CHECK-NEXT:                  for i_1, j_1, k_1, i_2 in T.grid(4, 32, 16, 2):
+# CHECK-NEXT:                      for i_3 in T.unroll(2):
+# CHECK-NEXT:                          for j_2 in T.unroll(3):
+# CHECK-NEXT:                              for j_3 in T.vectorized(16):
+# CHECK-NEXT:                                  with T.block("C"):
+# CHECK-NEXT:                                      v_i = T.axis.spatial(64, i_0_j_0_fused * 16 + i_1 * 4 + i_2 * 2 + i_3)
+# CHECK-NEXT:                                      v_j = T.axis.spatial(192, j_1 * 48 + j_2 * 16 + j_3)
+# CHECK-NEXT:                                      v_k = T.axis.reduce(256, k_0 * 16 + k_1)
+# CHECK-NEXT:                                      T.where(((T.Mul(0, 32) + j_1) * 3 + j_2) * 16 + j_3 < 192)
+# CHECK-NEXT:                                      T.reads(_0[v_i, v_k], _1_global[v_k, v_j])
+# CHECK-NEXT:                                      T.writes(C_global[v_i, v_j])
+# CHECK-NEXT:                                      with T.init():
+# CHECK-NEXT:                                          C_global[v_i, v_j] = T.float32(0.0)
+# CHECK-NEXT:                                      C_global[v_i, v_j] = C_global[v_i, v_j] + _0[v_i, v_k] * _1_global[v_k, v_j]
+# CHECK-NEXT:              for ax0, ax1 in T.grid(16, 192):
 # CHECK-NEXT:                  with T.block("C_global"):
-# CHECK-NEXT:                      v0 = T.axis.spatial(64, i_0_j_0_fused // 2 * 8 + ax0)
-# CHECK-NEXT:                      v1 = T.axis.spatial(64, i_0_j_0_fused % 2 * 32 + ax1)
+# CHECK-NEXT:                      v0 = T.axis.spatial(64, i_0_j_0_fused * 16 + ax0)
+# CHECK-NEXT:                      v1 = T.axis.spatial(192, ax1)
 # CHECK-NEXT:                      T.reads(C_global[v0, v1])
 # CHECK-NEXT:                      T.writes(C[v0, v1])
 # CHECK-NEXT:                      C[v0, v1] = C_global[v0, v1]
