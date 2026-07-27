@@ -331,6 +331,22 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
         self._sch_var = sch_var
         self._outf = outf
 
+    def _cache_read_factor_offset(
+        self, input_idx: int, pad: bool
+    ) -> tuple[int, int, int]:
+        if not pad:
+            return 0, 0, 0
+        input_spec = self._op.np_inputs_spec()[input_idx]
+        if len(input_spec["shape"]) < 2:
+            return 0, 0, 0
+        # Assume for CPU common number of sets and line size for L1
+        # Except to minimize conflicts by setting the inner axis
+        # size to a factor of num_sets and adding +1
+        num_sets, line_size = 64, 64
+        elt_size = np.dtype(input_spec["dtype"]).itemsize
+        elts_per_line = line_size // elt_size
+        return -2, elts_per_line * num_sets, elts_per_line
+
     def _dump_schedule(self, sched: LoopNest):
         root = sched.root_node
         if root is None:
@@ -381,11 +397,13 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
         if node.pack_at:
             for axis, (inp_idx, mtype, pad) in node.pack_at.items():
                 print(f"{sch}.compute_at(I_R{inp_idx}, {axis})", file=outf)
-                # TODO: handle pad
-                # print(
-                #        f"{sch}[I_R{inp_idx}].storage_align(I_R{inp_idx}.op.axis[-2], factor={factor}, offset={offset})",
-                #        file=outf,
-                #    )
+                dim, factor, offset = self._cache_read_factor_offset(inp_idx, pad)
+                if factor != 0:
+                    print(
+                        f"{sch}.storage_align(I_R{inp_idx}, 0, ",
+                        f"axis={dim}, factor={factor}, offset={offset})",
+                        file=outf,
+                    )
         if node.fuse_producer_at:
             for axis, prod_idx in node.fuse_producer_at.items():
                 print(f"{sch}.compute_at(I_F{prod_idx}, {axis})", file=outf)

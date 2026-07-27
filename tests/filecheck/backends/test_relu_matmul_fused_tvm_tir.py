@@ -102,6 +102,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  sch.reorder(i, j, k, i1, j1, k1, i2, j2)
 # CHECK-NEXT:  sch.reverse_compute_at(O_W0, j)
 # CHECK-NEXT:  sch.compute_at(I_R1, k)
+# CHECK-NEXT:  sch.storage_align(I_R1, 0,  axis=-2, factor=1024, offset=16)
 # CHECK-NEXT:  sch.compute_at(I_F0, k)
 # CHECK-NEXT:  sch.unroll(i2)
 # CHECK-NEXT:  sch.vectorize(j2)
@@ -142,6 +143,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:                          v1 = T.axis.spatial(64, i_0_j_0_fused % 2 * 32 + ax1)
 # CHECK-NEXT:                          T.reads(_1[v0, v1])
 # CHECK-NEXT:                          T.writes(_1_global[v0, v1])
+# CHECK-NEXT:                          T.block_attr({"buffer_dim_align": [[0, 0, 1024, 16]]})
 # CHECK-NEXT:                          _1_global[v0, v1] = _1[v0, v1]
 # CHECK-NEXT:                  for ax0, ax1 in T.grid(8, 16):
 # CHECK-NEXT:                      with T.block("T_reshape_1"):
