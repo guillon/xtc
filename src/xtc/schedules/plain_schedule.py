@@ -10,7 +10,7 @@ from pprint import pformat
 from copy import deepcopy
 
 from xtc.itf.schd.scheduler import DEFAULT_ROOT
-from xtc.schedules.loop_names import make_loop_name
+from xtc.schedules.loop_names import make_loop_name, basename
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,37 @@ class PlainNodeSchedule:
     distributed_buffers: dict[str, dict]
     fused: list[tuple[str, int]]
     fused_consumers: list[str]
+
+    def index_of_dim(self, dim: str) -> int:
+        return list(self.dims).index(dim)
+
+    def is_tile(self, loop_name: str) -> bool:
+        for tiles in self.tiles.values():
+            for tile in tiles:
+                if loop_name == tile:
+                    return True
+        return False
+
+    def is_base(self, loop_name: str) -> bool:
+        return basename(loop_name) in self.dims
+
+    def dim_of_tile(self, loop_name: str) -> str:
+        # Base dimension
+        bn = basename(loop_name)
+        if bn in self.dims:
+            return bn
+        # Tiled dimension
+        for dim, tiles in self.tiles.items():
+            for tile in tiles:
+                if bn == dim or loop_name == tile:
+                    return dim
+        assert False
+
+    def size_of_tile(self, tile_name: str) -> int | None:
+        for tiles in self.tiles.values():
+            if tile_name in tiles:
+                return tiles[tile_name]
+        return None
 
     @override
     def __str__(self):
@@ -68,7 +99,7 @@ class PlainNodeScheduler:
 
     def get_plain_schedule(self) -> PlainNodeSchedule:
         if not self.permutation:
-            self.permutation[DEFAULT_ROOT] = self.get_default_interchange(DEFAULT_ROOT)
+            self.permutation[DEFAULT_ROOT] = self._get_default_interchange(DEFAULT_ROOT)
 
         for fuse_axis in self.fused:
             assert fuse_axis[0] in self.permutation[next(iter(self.permutation))], (
@@ -100,7 +131,7 @@ class PlainNodeScheduler:
     def __str__(self) -> str:
         return str(self.get_plain_schedule())
 
-    def get_default_interchange(self, root: str) -> list[str]:
+    def _get_default_interchange(self, root: str) -> list[str]:
         ret = [make_loop_name(root, d) for d in self.dims]
         for tile_level in range(len(max(self.tiles.values(), key=len))):
             for _, v in self.tiles.items():
@@ -168,6 +199,49 @@ class PlainNodeScheduler:
             self.packed_buffers[axis_key] = [(input_idx, mtype, pad)]
         else:
             self.packed_buffers[axis_key].append((input_idx, mtype, pad))
+
+    def define_memory_mesh(self, axes: dict[str, int]):
+        assert len(self.memory_mesh) == 0, "Memory mesh has already been defined"
+        self.memory_mesh = axes
+
+    def define_processor_mesh(self, axes: dict[str, int]):
+        assert len(self.processor_mesh) == 0, "Processor mesh has already been defined"
+        assert self.memory_mesh, "Memory mesh has not been defined"
+        assert len(self.memory_mesh) <= len(axes), (
+            "Memory mesh must be a subset of the processor mesh"
+        )
+        for i, memory_size in enumerate(self.memory_mesh.values()):
+            assert list(axes.values())[i] == memory_size, (
+                "Memory mesh must be a subset of the processor mesh"
+            )
+        self.processor_mesh = axes
+
+    def distribute(self, axis: str, processor_axis: str, root: str = DEFAULT_ROOT):
+        assert self.processor_mesh, "Processor mesh has not been defined"
+        assert processor_axis in self.processor_mesh or processor_axis == "*", (
+            "Processor axis not found in processor mesh"
+        )
+        axis_key = make_loop_name(root, axis)
+        self.parallelization.append(axis_key)
+        self.distribution[axis_key] = processor_axis
+
+    def distributed_buffer_at(
+        self,
+        axis: str,
+        input_idx: int,
+        memory_axes: list[str],
+        root: str = DEFAULT_ROOT,
+    ):
+        assert self.memory_mesh, "Memory mesh has not been defined"
+        for ma in memory_axes:
+            assert ma in self.memory_mesh or ma == "*", (
+                "Memory axis not found in memory mesh"
+            )
+        axis_key = make_loop_name(root, axis)
+        self.distributed_buffers[axis_key] = {
+            "input_idx": input_idx,
+            "memory_axes": memory_axes,
+        }
 
     def fuse_producer_at(
         self, axis: str, input_idx: int, root: str = DEFAULT_ROOT

@@ -5,12 +5,13 @@
 from typing_extensions import override
 
 from xtc.itf.schd.scheduler import DEFAULT_ROOT
-from xtc.schedules.loop_nest import LoopNest, LoopNestNode, LoopInfo, SplitOrigin
+from xtc.schedules.loop_nest import LoopNest
+from xtc.schedules.loop_nest_builder import LoopNestBuilder
+
 import xtc.itf as itf
 import xtc.backends.mlir as backend
 
 from .MlirNodeScheduler import MlirNodeScheduler, MlirNodeSchedule
-from .MlirLoopNames import basename
 
 __all__ = [
     "MlirScheduler",
@@ -98,12 +99,12 @@ class MlirScheduler(itf.schd.Scheduler):
 
         if isinstance(self._backend, MlirGraphBackend):
             nodes_schedules = [
-                scheduler._current_scheduler.mlir_node_schedule()
+                scheduler._current_scheduler.get_node_schedule()
                 for scheduler in self._nodes_schedulers
             ]
         else:
             assert isinstance(self._backend, MlirNodeBackend)
-            nodes_schedules = [self._current_scheduler.mlir_node_schedule()]
+            nodes_schedules = [self._current_scheduler.get_node_schedule()]
         return MlirSchedule(
             scheduler=self,
             nodes_schedules=nodes_schedules,
@@ -211,57 +212,8 @@ class MlirScheduler(itf.schd.Scheduler):
 
     @override
     def get_loop_nest(self) -> LoopNest:
-        node_sched = self._current_scheduler
-        dims = node_sched.dims[:]
-
-        loop_nest = LoopNest(abstract_dims=dims)
-        root_node = loop_nest.build_root_node(node_sched.node_name)
-
-        # Assign splits to root_node first, stripping the root prefix from names
-        for axis, axis_splits in node_sched.splits.items():
-            root_node.splits[axis] = {basename(k): v for k, v in axis_splits.items()}
-
-        # Build mapper to get splits_info
-        mapper = LoopInfo.build_from_node(root_node)
-
-        def populate_node(node: LoopNestNode, perm: list[str]) -> None:
-            """Populate node with data for loops in its permutation."""
-            perm_set = set(perm)
-            node.interchange = [basename(n) for n in perm]
-            for axis, axis_tiles in node_sched.tiles.items():
-                for tile_name, size in axis_tiles.items():
-                    if tile_name in perm_set:
-                        if axis not in node.tiles:
-                            node.tiles[axis] = {}
-                        node.tiles[axis][basename(tile_name)] = size
-            node.vectorize = [
-                basename(v) for v in node_sched.vectorization if v in perm_set
-            ]
-            node.parallelize = [
-                basename(p) for p in node_sched.parallelization if p in perm_set
-            ]
-            node.unroll = {
-                basename(k): v for k, v in node_sched.unrolling.items() if k in perm_set
-            }
-
-        # Process each root in permutation
-        for root, perm in node_sched.permutation.items():
-            root_name = basename(root)
-            if root_name in mapper.splits_info:
-                # This root is a split - create child node
-                axis, start, end = mapper.splits_info[root_name]
-                child = LoopNestNode(
-                    root=root_name,
-                    tiles={d: {} for d in dims},
-                    split_origin=SplitOrigin(axis=axis, start=start, end=end),
-                )
-                populate_node(child, perm)
-                root_node.add_child(child)
-            else:
-                # This is the main root
-                populate_node(root_node, perm)
-
-        return loop_nest
+        node_schedule = self._current_scheduler.get_node_schedule()
+        return LoopNestBuilder.from_plain_node_schedule(node_schedule)
 
 
 class MlirSchedule(itf.schd.Schedule):
