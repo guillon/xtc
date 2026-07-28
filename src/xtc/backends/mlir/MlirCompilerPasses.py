@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
-from .MlirLoopNames import parent_name
 from dataclasses import dataclass
+import subprocess
+
 from mlir.dialects import transform
 from mlir.dialects.transform import (
     NamedSequenceOp,
@@ -33,7 +34,6 @@ from mlir.ir import (
 )
 from mlir.passmanager import PassManager
 from mlir.ir import Module
-import subprocess
 
 # Import SDist if available
 try:
@@ -42,7 +42,7 @@ except ImportError:
     sdist_transform = None
     pass
 
-from .MlirLoopNames import make_loop_name
+from xtc.schedules.loop_names import make_loop_name, parent_name
 from xtc.utils.ext_tools import transform_opts
 
 from .MlirProgram import RawMlirProgram
