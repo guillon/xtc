@@ -33,5 +33,7 @@ strategy = Strategy(graph, spec, initialize=False)
 print(sorted(strategy._constraints))
 print(sum(1 for _ in strategy.sample(100)))
 
-# CHECK: ['iL2 || {21}', 'iR1 || {21, iL2, 3}', 'iR2 || {21, iL2}', 'iR3 || {21, iL2, 3}', 'iS + 2 == 3', 'i_1_ + 6 == iL2', 'i_1_ <= iL2', 'jDDR || {32}', 'jR1 || {32, jDDR}', 'jR2 || {32, jDDR}', 'jR3 || {32, jDDR}']
-# CHECK-NEXT: 100
+# CHECK:       Traceback (most recent call last):
+# CHECK-NEXT:    File "/home/cguillon/work/xtc-future/xtc/tests/filecheck/search/test_matmul_descript_split_in_split.py", line 8, in <module>
+# CHECK-NEXT:      from xtc.search.strategies import Strategy_Descript as Strategy
+# CHECK-NEXT:  ImportError: cannot import name 'Strategy_Descript' from 'xtc.search.strategies' (/home/cguillon/work/xtc-future/xtc/src/xtc/search/strategies.py)

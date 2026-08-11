@@ -75,6 +75,10 @@ class MlirScheduler(itf.schd.Scheduler):
             )
 
     @property
+    def _default_node_name(self) -> str:
+        return self._current_scheduler.node_name
+
+    @property
     def _current_scheduler(self) -> MlirNodeScheduler:
         assert self._node_scheduler is not None
         return self._node_scheduler

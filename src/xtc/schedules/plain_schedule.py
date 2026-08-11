@@ -35,7 +35,7 @@ class PlainNodeSchedule:
     fused_consumers: list[str]
 
     def index_of_dim(self, dim: str) -> int:
-        return list(self.dims).index(dim)
+        return self.dims.index(basename(dim))
 
     def is_tile(self, loop_name: str) -> bool:
         for tiles in self.tiles.values():
@@ -56,7 +56,7 @@ class PlainNodeSchedule:
         for dim, tiles in self.tiles.items():
             for tile in tiles:
                 if bn == dim or loop_name == tile:
-                    return dim
+                    return basename(dim)
         assert False
 
     def size_of_tile(self, tile_name: str) -> int | None:
@@ -67,7 +67,21 @@ class PlainNodeSchedule:
 
     @override
     def __str__(self):
-        return pformat(asdict(self))
+        return pformat(asdict(self), sort_dicts=False)
+
+    def __post_init__(self):
+        # TODO: for now keep legacy behavior which forces interchange
+        # and empty tiling dict for the root_node
+        if not self.tiles:
+            for dim in self.dims:
+                self.tiles[make_loop_name(DEFAULT_ROOT, dim)] = {}
+        if not self.permutation:
+            self.permutation[DEFAULT_ROOT] = []
+            for dim in self.dims:
+                self.permutation[DEFAULT_ROOT].extend(
+                    [make_loop_name(DEFAULT_ROOT, dim)]
+                    + list(self.tiles[make_loop_name(DEFAULT_ROOT, dim)])
+                )
 
 
 class PlainNodeScheduler:
@@ -83,7 +97,7 @@ class PlainNodeScheduler:
         self.dims = dims[:]
         self.loop_stamps = loop_stamps[:]
         self.splits: dict[str, dict[str, int]] = {}
-        self.tiles: dict[str, dict[str, int]] = {k: {} for k in self.dims}
+        self.tiles: dict[str, dict[str, int]] = {}
         self.permutation: dict[str, list[str]] = {}
         self.vectorization: list[str] = []
         self.parallelization: list[str] = []
@@ -98,14 +112,6 @@ class PlainNodeScheduler:
         self.fused_consumers: list[str] = []
 
     def get_plain_schedule(self) -> PlainNodeSchedule:
-        if not self.permutation:
-            self.permutation[DEFAULT_ROOT] = self._get_default_interchange(DEFAULT_ROOT)
-
-        for fuse_axis in self.fused:
-            assert fuse_axis[0] in self.permutation[next(iter(self.permutation))], (
-                "Fusion must be to an axis in the base root not the result of a split."
-            )
-
         return PlainNodeSchedule(
             node_name=self.node_name,
             node_ident=self.node_ident,
@@ -144,7 +150,6 @@ class PlainNodeScheduler:
     def set_dims(self, dims: list[str]) -> None:
         assert len(dims) == len(self.dims)
         self.dims = dims[:]
-        self.tiles = {k: {} for k in self.dims}
 
     def split(
         self, dim: str, segments: dict[str, int], root: str = DEFAULT_ROOT
@@ -152,14 +157,15 @@ class PlainNodeScheduler:
         segments_renamed = {
             make_loop_name(root, key): val for key, val in segments.items()
         }
-        self.splits[dim] = segments_renamed
-        for s in segments_renamed:
-            self.tiles[s] = {}
+        self.splits[make_loop_name(root, dim)] = segments_renamed
 
     def tile(self, dim: str, tiles: dict[str, int], root: str = DEFAULT_ROOT):
+        tile_root = make_loop_name(root, dim)
         for d, s in tiles.items():
+            if tile_root not in self.tiles:
+                self.tiles[tile_root] = {}
             tile_name = make_loop_name(root, d)
-            self.tiles[dim][tile_name] = s
+            self.tiles[tile_root][tile_name] = s
 
     def interchange(self, permutation: list[str], root: str = DEFAULT_ROOT):
         self.permutation[root] = [make_loop_name(root, a) for a in permutation]
@@ -168,7 +174,7 @@ class PlainNodeScheduler:
         self.vectorization += [make_loop_name(root, a) for a in axes]
 
     def parallelize(self, axes: list[str], root: str = DEFAULT_ROOT):
-        self.parallelization = [make_loop_name(root, a) for a in axes]
+        self.parallelization += [make_loop_name(root, a) for a in axes]
 
     def unroll(self, unrolls: dict[str, int], root: str = DEFAULT_ROOT):
         for dim, ufactor in unrolls.items():
@@ -180,11 +186,10 @@ class PlainNodeScheduler:
         mtype: str | None = None,
         root: str = DEFAULT_ROOT,
     ) -> None:
-        axis_key = make_loop_name(root, axis)
-        if axis_key not in self.write_buffers.keys():
-            self.write_buffers[axis_key] = [mtype]
-        else:
-            self.write_buffers[axis_key].append(mtype)
+        buffer_axis = make_loop_name(root, axis)
+        if buffer_axis not in self.write_buffers:
+            self.write_buffers[buffer_axis] = []
+        self.write_buffers[buffer_axis].append(mtype)
 
     def pack_at(
         self,
@@ -194,11 +199,10 @@ class PlainNodeScheduler:
         pad: bool = False,
         root: str = DEFAULT_ROOT,
     ):
-        axis_key = make_loop_name(root, axis)
-        if axis_key not in self.packed_buffers.keys():
-            self.packed_buffers[axis_key] = [(input_idx, mtype, pad)]
-        else:
-            self.packed_buffers[axis_key].append((input_idx, mtype, pad))
+        pack_axis = make_loop_name(root, axis)
+        if pack_axis not in self.packed_buffers:
+            self.packed_buffers[pack_axis] = []
+        self.packed_buffers[pack_axis].append((input_idx, mtype, pad))
 
     def define_memory_mesh(self, axes: dict[str, int]):
         assert len(self.memory_mesh) == 0, "Memory mesh has already been defined"
@@ -221,9 +225,9 @@ class PlainNodeScheduler:
         assert processor_axis in self.processor_mesh or processor_axis == "*", (
             "Processor axis not found in processor mesh"
         )
-        axis_key = make_loop_name(root, axis)
-        self.parallelization.append(axis_key)
-        self.distribution[axis_key] = processor_axis
+        dist_axis = make_loop_name(root, axis)
+        self.parallelization.append(dist_axis)
+        self.distribution[dist_axis] = processor_axis
 
     def distributed_buffer_at(
         self,
@@ -237,8 +241,8 @@ class PlainNodeScheduler:
             assert ma in self.memory_mesh or ma == "*", (
                 "Memory axis not found in memory mesh"
             )
-        axis_key = make_loop_name(root, axis)
-        self.distributed_buffers[axis_key] = {
+        dist_axis = make_loop_name(root, axis)
+        self.distributed_buffers[dist_axis] = {
             "input_idx": input_idx,
             "memory_axes": memory_axes,
         }
@@ -246,9 +250,9 @@ class PlainNodeScheduler:
     def fuse_producer_at(
         self, axis: str, input_idx: int, root: str = DEFAULT_ROOT
     ) -> None:
-        axis_key = make_loop_name(root, axis)
-        self.fused.append((axis_key, input_idx))
+        fuse_axis = make_loop_name(root, axis)
+        self.fused.append((fuse_axis, input_idx))
 
     def fuse_consumer_at(self, axis: str, root: str = DEFAULT_ROOT) -> None:
-        axis_key = make_loop_name(root, axis)
-        self.fused_consumers.append(axis_key)
+        fuse_axis = make_loop_name(root, axis)
+        self.fused_consumers.append(fuse_axis)

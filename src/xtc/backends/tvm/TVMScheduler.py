@@ -81,7 +81,7 @@ class TVMScheduleEmitterTE(TVMScheduleEmitter):
             for idx, (axis, size) in enumerate(dim_tiles.items()):
                 tilings[axis] = (dim, prev_axis, size)
                 prev_axis = axis
-        tilings = {axis: tilings[axis] for axis in order}
+        tilings = {axis: tilings.get(axis, (axis, "", 0)) for axis in order}
         return tilings
 
     def _write_buffer_tiling(
@@ -417,7 +417,7 @@ def tvm_update_loopnest_for_codegen(sched: LoopNest) -> LoopNest:
                         )
             adjusted_tiles[dim] = adjusted_dim_tiles
         adjusted_unrolling = {u: adjusted_unrolling[u] for u in adjusted_unrolls}
-        return LoopNestNode(
+        updated_node = LoopNestNode(
             root=node.root,
             tiles=adjusted_tiles,
             splits=deepcopy(node.splits),
@@ -429,7 +429,12 @@ def tvm_update_loopnest_for_codegen(sched: LoopNest) -> LoopNest:
             pack_at=deepcopy(node.pack_at),
             fuse_producer_at=deepcopy(node.fuse_producer_at),
             fuse_consumer_at=deepcopy(node.fuse_consumer_at),
+            split_origin=deepcopy(node.split_origin),
         )
+        for child in node.children:
+            updated_child = _update_loopnode(child)
+            updated_node.add_child(updated_child)
+        return updated_node
 
     root = sched.root_node
     if root is not None:
@@ -466,6 +471,10 @@ class TVMScheduler(itf.schd.Scheduler):
             self._op.name,  # TODO: ident
             list(self._op.operator.dims()),
         )
+
+    @property
+    def _default_node_name(self) -> str:
+        return self._op.name
 
     @property
     @override

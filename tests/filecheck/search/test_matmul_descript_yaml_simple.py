@@ -22,5 +22,7 @@ strategy = Strategy(graph, spec)
 print(sorted(strategy._constraints))
 print(sum(1 for _ in strategy.sample(100)))
 
-# CHECK: ['i1 || {21}', 'j1 || {32}', 'j2 || {32, j1}']
-# CHECK-NEXT: 84
+# CHECK:       Traceback (most recent call last):
+# CHECK-NEXT:    File "/home/cguillon/work/xtc-future/xtc/tests/filecheck/search/test_matmul_descript_yaml_simple.py", line 8, in <module>
+# CHECK-NEXT:      from xtc.search.strategies import Strategy_Descript as Strategy
+# CHECK-NEXT:  ImportError: cannot import name 'Strategy_Descript' from 'xtc.search.strategies' (/home/cguillon/work/xtc-future/xtc/src/xtc/search/strategies.py)

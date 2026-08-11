@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from .exceptions import ScheduleValidationError
 
 
-@dataclass
+@dataclass(frozen=True)
 class SplitOrigin:
     """Describes how a node was created via a split from its parent.
 
@@ -28,7 +28,7 @@ class SplitOrigin:
 NodeT = TypeVar("NodeT", bound="Node")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Node(Generic[NodeT]):
     """Base class for tree nodes with parent/child relationships.
 
@@ -52,8 +52,13 @@ class Node(Generic[NodeT]):
         return self.parent is None
 
     def add_child(self, child: NodeT) -> None:
-        """Add a child node and set its parent to this node."""
-        child.parent = self  # type: ignore[assignment]
+        """Add a child node and set its parent to this node.
+
+        If the parent was already set, assert it's same.
+        """
+        if child.parent is not None:
+            assert child.parent is self
+        object.__setattr__(child, "parent", self)
         self.children.append(child)
 
     def ancestors(self) -> list[NodeT]:
@@ -74,7 +79,7 @@ class Node(Generic[NodeT]):
         return result
 
 
-@dataclass
+@dataclass(frozen=True)
 class LoopNestNode(Node["LoopNestNode"]):
     """Represents a node in the loop nest tree with its transformations.
 
@@ -103,7 +108,7 @@ class LoopNestNode(Node["LoopNestNode"]):
     """
 
     root: str
-    tiles: dict[str, dict[str, int]]
+    tiles: dict[str, dict[str, int]] = field(default_factory=dict)
     splits: dict[str, dict[str, int]] = field(default_factory=dict)
     interchange: list[str] = field(default_factory=list)
     vectorize: list[str] = field(default_factory=list)
@@ -245,7 +250,7 @@ class LoopNestNode(Node["LoopNestNode"]):
         return line
 
 
-@dataclass
+@dataclass(frozen=True)
 class LoopInfo:
     """Maps loop names to their corresponding axis names and metadata.
 
@@ -327,7 +332,7 @@ class LoopInfo:
         return LoopInfo(list(dims), tiles_info, splits_info)
 
 
-@dataclass
+@dataclass(frozen=True)
 class LoopNest:
     """Represents a complete loop nest structure for scheduling.
 
@@ -352,12 +357,6 @@ class LoopNest:
         if self.root_node is None:
             return []
         return [self.root_node] + self.root_node.descendants_dfs()
-
-    def build_root_node(self, root: str) -> LoopNestNode:
-        """Build and set the root node of the loop nest tree."""
-        node = LoopNestNode(root=root, tiles={a: {} for a in self.abstract_dims})
-        self.root_node = node
-        return node
 
     def check(self):
         assert self.root_node is not None

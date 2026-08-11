@@ -42,7 +42,7 @@ except ImportError:
     sdist_transform = None
     pass
 
-from xtc.schedules.loop_names import make_loop_name, parent_name
+from xtc.schedules.loop_names import make_loop_name, parent_name, basename
 from xtc.utils.ext_tools import transform_opts
 
 from .MlirProgram import RawMlirProgram
@@ -465,7 +465,7 @@ class MlirProgramInsertTransformPass:
         dim_to_split = split_state.loop_dim_by_split[loop_name]
         split_handle = structured.SplitOp(
             target=sched_state.handle,
-            dimension=schedule.dims.index(dim_to_split),
+            dimension=schedule.dims.index(basename(dim_to_split)),
             chunk_sizes=split_state.chunk_size(loop_name),
         )
         split_command = SplitHandleOp(

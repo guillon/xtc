@@ -718,7 +718,7 @@ def build_schedule_from_ttile(
 ):
     sch = impl.get_scheduler()
     ldims = get_ldims_computation(comp)
-    name_op = str(comp.spec)
+    name_op = sch._default_node_name  # type: ignore # TODO: no interface for this
     str_descr_sched = get_descr_sched(scheme, comp, machine, True)
     spec_schedule = eval(str_descr_sched)
 
