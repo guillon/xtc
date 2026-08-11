@@ -79,9 +79,13 @@ class SplitState:
             loop: cut
             for sub_splits in splits.values()
             for loop, cut in sub_splits.items()
+            if parent_name(loop) == root
         }
         self.loop_dim_by_split: dict[str, str] = {
-            loop: dim for dim, splits in splits.items() for loop in splits
+            loop: dim
+            for dim, splits in splits.items()
+            for loop in splits
+            if parent_name(loop) == root
         }
         self.prev_split_size = {loop: 0 for loop in self.all_splits_by_loop}
         loops_to_split: list[str] = list(self.all_splits_by_loop)
