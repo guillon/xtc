@@ -50,16 +50,19 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
         root = sched.root_node
         if root is None:
             return
-        self._dump_schedule_node(sched, root)
-
-    def _dump_schedule_node(self, sched: LoopNest, node: LoopNestNode):
-        assert node is not None, "unexpected undefined node"
-        assert not node.splits, "node split not implemented for this backend"
+        block = "O"
         sch = self._sch_var
         outf = self._outf
-        dims = sched.abstract_dims
-        block = "O"
         print(f'{block} = {sch}.get_sblock("{self._op.name}")', file=outf)
+        dims = sched.abstract_dims
+        self._dump_schedule_node(block, dims, sched, root)
+
+    def _dump_schedule_node(
+        self, block: str, dims: list[str], sched: LoopNest, node: LoopNestNode
+    ):
+        assert node is not None, "unexpected undefined node"
+        sch = self._sch_var
+        outf = self._outf
         print(f"{', '.join(dims)}, = {sch}.get_loops({block})", file=outf)
         if node.fuse_consumer_at:
             print(f"O_F0 = {sch}.get_consumers({block})[0]", file=outf)
@@ -79,8 +82,13 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
                     f"I_F{prod_idx} = {sch}.get_producers({block})[{prod_idx}]",
                     file=outf,
                 )
-        for t_axis, t_tiles in [(k, v) for k, v in node.tiles.items() if v]:
+        axes = []
+        for t_axis in dims:
+            t_tiles = node.tiles.get(t_axis, {})
             t_names = [t_axis] + list(t_tiles)
+            axes += t_names
+            if not t_tiles:
+                continue
             factors = functools.reduce(
                 lambda acc, x: acc + [x // acc[-1]], reversed(t_tiles.values()), [1]
             )
@@ -89,7 +97,14 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
                 f"{', '.join(t_names)}, = {sch}.split({t_axis}, factors=[{', '.join(t_factors)}])",
                 file=outf,
             )
-        print(f"{sch}.reorder({', '.join(node.interchange)})", file=outf)
+        outer = [axis for axis in node.interchange if axis in axes]
+        reorder = outer + axes
+        if node.splits:
+            split_axis = list(node.splits)[0]
+            reorder = outer + [split_axis] + axes
+        reorder = list(dict.fromkeys(reorder))
+        inner = [axis for axis in reorder if axis not in outer]
+        print(f"{sch}.reorder({', '.join(reorder)})", file=outf)
         if node.buffer_at:
             for axis in node.buffer_at:
                 print(f"{sch}.reverse_compute_at(O_W0, {axis})", file=outf)
@@ -125,6 +140,22 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
                 f"{sch}.parallel({node.parallelize[-1]})",
                 file=outf,
             )
+        if node.splits:
+            split_axis = list(node.splits)[0]
+            splits = node.splits[split_axis]
+            split_factors = [str(x) for x in list(splits.values())[1:]]
+            print(
+                f"{sch}, {block}_SPLITS = loop_partition_rebased("
+                f"{sch}, {split_axis}, [{', '.join(split_factors)}, None])",
+                file=outf,
+            )
+            for idx, split in enumerate(splits):
+                split_block = f"{block}_{split_axis}_{idx}"
+                print(
+                    f"{split_block} = {block}_SPLITS[{idx}]",
+                    file=outf,
+                )
+                self._dump_schedule_node(split_block, inner, sched, node.children[idx])
 
     @override
     def emit(self, scheduler: "TVMScheduler"):

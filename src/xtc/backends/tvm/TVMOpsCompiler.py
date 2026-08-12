@@ -15,6 +15,7 @@ from .TVMOps import (
     TVMOperation,
     TVMGraph,
 )
+from .TVMScheduleTransforms import loop_partition_rebased
 
 __all__ = [
     "TVMExprCompiler",
@@ -80,9 +81,14 @@ class TVMSchedulableExprTIR(TVMSchedulableExpr):
             return TVMScheduledExprTIR(self, sch)
         schedule_map = schedule.schedule_impl
         sch.work_on(func_name)
+        namespace = {
+            "sch": sch,
+            "loop_partition_rebased": loop_partition_rebased,
+        }
         for sched in schedule_map.values():
             if sched:
-                exec(sched, {"sch": sch}, {})
+                exec(sched, namespace, namespace)
+        sch = cast(TIRSchedule, namespace["sch"])
         return TVMScheduledExprTIR(self, sch)
 
 
