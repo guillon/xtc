@@ -1,0 +1,57 @@
+dependencies = [
+    'jinja2',
+    'matplotlib',
+    'numpy<2.3',
+    'ordered-set',
+    'py-cpuinfo',
+    'tqdm',
+    'typing_extensions',
+    'pyyaml',
+    'scikit-learn',
+    'xdsl~=0.57.1',
+    'strictyaml',
+    'tomlkit',
+]
+
+[groups.default]
+include = ["mlir", "tvm"]
+
+[groups.dev]
+include = ["default", "test"]
+
+[groups.test]
+dependencies = [
+    "coverage>=7.8.0",
+    "filecheck",
+    "lit",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings-python",
+    "mypy==1.15.0",
+    "pytest",
+    "pytest-xdist",
+    "pyright==1.1.407",
+    "types-PyYAML",
+    "marimo==0.19.6",
+    "ruff==0.14.10",
+]
+
+[groups.llvm]
+publish = false
+dependencies = [
+    'xtc-llvm-tools==22.1.8.1',
+]
+
+[groups.mlir]
+include = ["llvm"]
+dependencies = [
+    'xtc-mlir-tools==22.1.8.2',
+    'xtc-mlir-python-bindings==22.1.8.2',
+    'xtc-mlir-extra-tools==22.1.8.6',
+]
+
+[groups.tvm]
+include = ["llvm"]
+dependencies = [
+    'xtc-tvm-python-bindings==0.19.0.11',
+]

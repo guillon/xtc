@@ -5,6 +5,7 @@ help:
 	@echo "  make check           # run all acceptance tests (all targets below)"
 	@echo "    make check-format  # run all format checks tests"
 	@echo "    make check-type    # run all type checks tests"
+	@echo "    make check-dependencies # check that pyproject.toml is up to date
 	@echo "    make check-lit     # run all lit checks for binary target"
 	@echo "    make check-lit-c   # run all lit checks for C target"
 	@echo "    make check-lit-nvgpu # run all lit checks for NVGPU target"
@@ -14,6 +15,7 @@ help:
 	@echo "  make format          # apply formatting (warning: change files in place)"
 	@echo "    make format-license # add licenses"
 	@echo "    make format-ruff   # format python files with ruff"
+	@echo "  make dependencies    # update pyproject.toml dependencies from dependencies.toml
 	@echo "  make agents          # create AGENTS.md"
 	@echo "  make claude          # create CLAUDE.md"
 	@echo
@@ -22,7 +24,7 @@ help:
 test:
 	pytest tests/pytest/unit tests/pytest/mlir tests/pytest/tvm tests/pytest/jir
 
-check: check-format check-banwords check-type check-lit-all check-pytest check-tutorials
+check: check-format check-banwords check-type check-dependencies check-lit-all check-pytest check-tutorials
 
 format: format-license format-ruff
 
@@ -44,6 +46,9 @@ check-pyright:
 
 check-mypy:
 	mypy
+
+check-dependencies:
+	scripts/pyproject/update_dependencies.py --check
 
 check-lit-all:
 	$(MAKE) check-lit
@@ -75,6 +80,9 @@ format-ruff:
 format-license:
 	scripts/licensing/licensing.py --apply
 
+dependencies:
+	scripts/pyproject/update_dependencies.py
+
 agents:
 	scripts/llms/init_agents.py agents README.md "Links" "AI assistants" > AGENTS.md
 
@@ -84,5 +92,5 @@ claude:
 run-tutorial:
 	marimo run docs/tutorials/xtc_101.py
 
-.PHONY: help test check check-lit-all check-lit check-lit-c check-lit-nvpgu check-pytest check-type check-pyright check-mypy check-format check-format-ruff check-license check-banwords format format-ruff format-license agents claude check-tutorials run-tutorial
+.PHONY: help test check check-lit-all check-lit check-lit-c check-lit-nvpgu check-pytest check-type check-pyright check-mypy check-format check-format-ruff check-license check-banwords format format-ruff format-license agents claude check-tutorials run-tutorial check-dependencies dependencies
 .SUFFIXES:
