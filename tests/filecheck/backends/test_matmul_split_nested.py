@@ -69,11 +69,10 @@ loop_nest = sch.get_loop_nest()
 print(loop_nest.root_node.pretty_print())
 loop_nest.check()
 
-# TODO: for now mlir backend fails to generate
-# res = impl.evaluate(
-#     sch.schedule(),
-# )
-# print("VALID:", isinstance(res, float))
+res = impl.evaluate(
+    sch.schedule(),
+)
+print("VALID:", isinstance(res, float))
 
 # CHECK:       loop K
 # CHECK-NEXT:    split(I, 0, 2)
@@ -89,3 +88,4 @@ loop_nest.check()
 # CHECK-NEXT:          loop J
 # CHECK-NEXT:            tile(J, 128)  // vectorized
 # CHECK-NEXT:              ...
+# CHECK-NEXT:  VALID: True
