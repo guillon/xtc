@@ -3,16 +3,18 @@
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
 import sys
+from abc import ABC, abstractmethod
 from typing_extensions import override
 from typing import TextIO, TypeAlias
 from io import StringIO
 import numpy as np
 from dataclasses import dataclass
 from copy import deepcopy
+import functools
 
 from xtc.utils.math import pow2divisor
 from xtc.itf.schd.scheduler import DEFAULT_ROOT
-from xtc.schedules.loop_nest import LoopNest
+from xtc.schedules.loop_nest import LoopNest, LoopNestNode
 import xtc.backends.tvm as backend
 import xtc.itf as itf
 
@@ -36,7 +38,12 @@ class TVMPlainSchedule:
     fused: list[tuple[str, int]]
 
 
-class TVMScheduleEmitter:
+class TVMScheduleEmitter(ABC):
+    @abstractmethod
+    def emit(self, scheduler: "TVMScheduler"): ...
+
+
+class TVMScheduleEmitterTE(TVMScheduleEmitter):
     def __init__(
         self,
         op: TVMOperation,
@@ -303,9 +310,193 @@ class TVMScheduleEmitter:
                         file=outf,
                     )
 
-    def emit(self, sched: TVMPlainSchedule):
+    @override
+    def emit(self, scheduler: "TVMScheduler"):
+        sched = scheduler._get_plain_schedule()
         # First adjust schedule to fix code gen limitations before emit
         sched = self._update_schedule_for_codegen(sched)
+        self._dump_schedule(sched)
+
+
+class TVMScheduleEmitterTIR(TVMScheduleEmitter):
+    def __init__(
+        self,
+        op: TVMOperation,
+        obj_var: str = "obj",
+        sch_var: str = "sch",
+        outf: TextIO = sys.stdout,
+    ):
+        self._op = op
+        self._obj_var = obj_var
+        self._sch_var = sch_var
+        self._outf = outf
+
+    def _cache_read_factor_offset(
+        self, input_idx: int, pad: bool
+    ) -> tuple[int, int, int]:
+        if not pad:
+            return 0, 0, 0
+        input_spec = self._op.np_inputs_spec()[input_idx]
+        if len(input_spec["shape"]) < 2:
+            return 0, 0, 0
+        # Assume for CPU common number of sets and line size for L1
+        # Except to minimize conflicts by setting the inner axis
+        # size to a factor of num_sets and adding +1
+        num_sets, line_size = 64, 64
+        elt_size = np.dtype(input_spec["dtype"]).itemsize
+        elts_per_line = line_size // elt_size
+        return -2, elts_per_line * num_sets, elts_per_line
+
+    def _dump_schedule(self, sched: LoopNest):
+        root = sched.root_node
+        if root is None:
+            return
+        self._dump_schedule_node(sched, root)
+
+    def _dump_schedule_node(self, sched: LoopNest, node: LoopNestNode):
+        assert node is not None, "unexpected undefined node"
+        assert not node.splits, "node split not implemented for this backend"
+        sch = self._sch_var
+        outf = self._outf
+        dims = sched.abstract_dims
+        block = "O"
+        print(f'{block} = {sch}.get_block("{self._op.name}")', file=outf)
+        print(f"{', '.join(dims)}, = {sch}.get_loops({block})", file=outf)
+        if node.fuse_consumer_at:
+            print(f"O_F0 = {sch}.get_consumers({block})[0]", file=outf)
+        if node.pack_at:
+            inputs = list({inp[0]: None for inp in node.pack_at.values()})
+            for inp_idx in inputs:
+                print(
+                    f'I_R{inp_idx} = {sch}.cache_read({block}, {inp_idx}, "global")',
+                    file=outf,
+                )
+        if node.buffer_at:
+            print(f'O_W0 = {sch}.cache_write({block}, 0, "global")', file=outf)
+        if node.fuse_producer_at:
+            producers = list({idx: None for idx in node.fuse_producer_at.values()})
+            for prod_idx in producers:
+                print(
+                    f"I_F{prod_idx} = {sch}.get_producers({block})[{prod_idx}]",
+                    file=outf,
+                )
+        for t_axis, t_tiles in [(k, v) for k, v in node.tiles.items() if v]:
+            t_names = [t_axis] + list(t_tiles)
+            factors = functools.reduce(
+                lambda acc, x: acc + [x // acc[-1]], reversed(t_tiles.values()), [1]
+            )
+            t_factors = ["None"] + [str(f) for f in factors[:0:-1]]
+            print(
+                f"{', '.join(t_names)}, = {sch}.split({t_axis}, factors=[{', '.join(t_factors)}])",
+                file=outf,
+            )
+        print(f"{sch}.reorder({', '.join(node.interchange)})", file=outf)
+        if node.buffer_at:
+            for axis in node.buffer_at:
+                print(f"{sch}.reverse_compute_at(O_W0, {axis})", file=outf)
+        if node.pack_at:
+            for axis, (inp_idx, mtype, pad) in node.pack_at.items():
+                print(f"{sch}.compute_at(I_R{inp_idx}, {axis})", file=outf)
+                dim, factor, offset = self._cache_read_factor_offset(inp_idx, pad)
+                if factor != 0:
+                    print(
+                        f"{sch}.storage_align(I_R{inp_idx}, 0, ",
+                        f"axis={dim}, factor={factor}, offset={offset})",
+                        file=outf,
+                    )
+        if node.fuse_producer_at:
+            for axis, prod_idx in node.fuse_producer_at.items():
+                print(f"{sch}.compute_at(I_F{prod_idx}, {axis})", file=outf)
+        if node.fuse_consumer_at:
+            for axis in node.fuse_consumer_at:
+                print(f"{sch}.reverse_compute_at(O_F0, {axis})", file=outf)
+        for u_axis, u_factor in node.unroll.items():
+            print(f"{sch}.unroll({u_axis})", file=outf)
+        for v_axis in node.vectorize:
+            print(f"{sch}.vectorize({v_axis})", file=outf)
+        if node.parallelize:
+            if len(node.parallelize) > 1:
+                print(
+                    f"{node.parallelize[-1]} = {sch}.fuse({', '.join(node.parallelize)})",
+                    file=outf,
+                )
+            print(
+                f"{sch}.parallel({node.parallelize[-1]})",
+                file=outf,
+            )
+
+    @classmethod
+    def _update_loopnest_for_codegen(cls, sched: LoopNest):
+        def _update_loopnode(node: LoopNestNode) -> LoopNestNode:
+            adjusted_tiles = {}
+            adjusted_unrolling = {
+                k: v for k, v in node.unroll.items() if k not in node.vectorize
+            }
+            adjusted_unrolls = list(adjusted_unrolling)
+            adjusted_vectorization = node.vectorize[:]
+            adjusted_permutation = node.interchange[:]
+            for dim, dim_tiles in node.tiles.items():
+                adjusted_dim_tiles = {}
+                for axis, size in dim_tiles.items():
+                    adjusted_dim_tiles.update({axis: size})
+                    if axis in adjusted_unrolling:
+                        assert axis not in adjusted_vectorization
+                        unroll = adjusted_unrolling[axis]
+                        if unroll < size:
+                            axis_idx = adjusted_unrolls.index(axis)
+                            new_axis = f"__u_{axis}"
+                            adjusted_dim_tiles.update({new_axis: unroll})
+                            adjusted_unrolls[axis_idx] = new_axis
+                            del adjusted_unrolling[axis]
+                            adjusted_unrolling.update({new_axis: unroll})
+                            adjusted_permutation.insert(
+                                adjusted_permutation.index(axis) + 1,
+                                new_axis,
+                            )
+                    elif axis in adjusted_vectorization:
+                        assert axis not in adjusted_unrolling
+                        pow2 = pow2divisor(size)
+                        unroll = size // pow2
+                        if unroll > 1:
+                            axis_idx = adjusted_vectorization.index(axis)
+                            new_axis = f"__v_{axis}"
+                            adjusted_dim_tiles.update({new_axis: pow2})
+                            adjusted_vectorization[axis_idx] = new_axis
+                            adjusted_unrolls.append(axis)
+                            adjusted_unrolling.update({axis: unroll})
+                            adjusted_permutation.insert(
+                                adjusted_permutation.index(axis) + 1,
+                                new_axis,
+                            )
+                adjusted_tiles[dim] = adjusted_dim_tiles
+            adjusted_unrolling = {u: adjusted_unrolling[u] for u in adjusted_unrolls}
+            return LoopNestNode(
+                root=node.root,
+                tiles=adjusted_tiles,
+                splits=deepcopy(node.splits),
+                interchange=adjusted_permutation,
+                vectorize=adjusted_vectorization,
+                parallelize=deepcopy(node.parallelize),
+                unroll=adjusted_unrolling,
+                buffer_at=deepcopy(node.buffer_at),
+                pack_at=deepcopy(node.pack_at),
+                fuse_producer_at=deepcopy(node.fuse_producer_at),
+                fuse_consumer_at=deepcopy(node.fuse_consumer_at),
+            )
+
+        root = sched.root_node
+        if root is not None:
+            root = _update_loopnode(root)
+        return LoopNest(
+            abstract_dims=sched.abstract_dims,
+            root_node=root,
+        )
+
+    @override
+    def emit(self, scheduler: "TVMScheduler"):
+        sched = scheduler.get_loop_nest()
+        sched = self._update_loopnest_for_codegen(sched)
+        sched.check()
         self._dump_schedule(sched)
 
 
@@ -343,6 +534,7 @@ class TVMScheduler(itf.schd.Scheduler):
         self.write_caches: list[str] = []
         self.read_buffers: list[tuple[str, int, bool]] = []
         self.fused: list[tuple[str, int]] = []
+        self.fused_consumers: list[str] = []
         self._update_loops()
 
     @property
@@ -365,9 +557,11 @@ class TVMScheduler(itf.schd.Scheduler):
     @override
     def schedule(self) -> itf.schd.Schedule:
         io = StringIO()
-        emitter = TVMScheduleEmitter(op=self._op, outf=io)
-        schedule = self._get_plain_schedule()
-        emitter.emit(schedule)
+        if self._backend._tir_schedule:
+            emitter: TVMScheduleEmitter = TVMScheduleEmitterTIR(op=self._op, outf=io)
+        else:
+            emitter = TVMScheduleEmitterTE(op=self._op, outf=io)
+        emitter.emit(self)
         sched = io.getvalue()
         assert self._op.name is not None
         schedule_impl = {self._op.name: sched}
@@ -468,6 +662,10 @@ class TVMScheduler(itf.schd.Scheduler):
         self.fused.append((axis, input_idx))
 
     @override
+    def fuse_consumer_at(self, axis: str, root: str = DEFAULT_ROOT) -> None:
+        self.fused_consumers.append(axis)
+
+    @override
     def define_memory_mesh(self, axes: dict[str, int]) -> None:
         # TODO: not implemented for now
         pass
@@ -498,11 +696,11 @@ class TVMScheduler(itf.schd.Scheduler):
     def _get_plain_schedule(self) -> TVMPlainSchedule:
         return TVMPlainSchedule(
             dims=deepcopy(self.dims),
-            tiles=self.tiles,
-            permutation=self.permutation,
+            tiles=deepcopy(self.tiles),
+            permutation=deepcopy(self.permutation),
             parallelization=deepcopy(self.parallelization),
-            unrolling=self.unrolling,
-            vectorization=self.vectorization,
+            unrolling=deepcopy(self.unrolling),
+            vectorization=deepcopy(self.vectorization),
             write_caches=deepcopy(self.write_caches),
             read_buffers=deepcopy(self.read_buffers),
             fused=deepcopy(self.fused),
@@ -542,6 +740,12 @@ class TVMScheduler(itf.schd.Scheduler):
         root_node.pack_at = {
             axis: (input_idx, None, pad) for axis, input_idx, pad in self.read_buffers
         }
+
+        # Build fuse_producer_at mapping
+        root_node.fuse_producer_at = dict(self.fused)
+
+        # Build fuse_consumer_at list
+        root_node.fuse_consumer_at = list(self.fused_consumers)
 
         return loop_nest
 
