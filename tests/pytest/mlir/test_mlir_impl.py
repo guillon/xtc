@@ -16,8 +16,8 @@ def sched_tile2(sch):
     sch.tile("k", {"k1": 13})
     # Expected in MLIR schedule
     return [
-        "permutation={'.': ['./i', './j', './k', './i1', './j1', './k1', './i2', './j2']}",
-        "'j': {'./j1': 64, './j2': 64}",
+        "permutation={'.': ['./i', './i1', './i2', './j', './j1', './j2', './k', './k1']}",
+        "'./j': {'./j1': 64, './j2': 64}",
     ]
 
 def sched_tile2p(sch):

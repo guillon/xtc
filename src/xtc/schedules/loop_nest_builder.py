@@ -4,81 +4,127 @@
 #
 from __future__ import annotations
 
-from .loop_names import basename
+from typing import Any
+from .loop_names import basename, parent_name, make_loop_name, rooted_name
 from .plain_schedule import PlainNodeSchedule
 from .loop_nest import LoopInfo, LoopNest, LoopNestNode, SplitOrigin
 
 
 class LoopNestBuilder:
-    @staticmethod
-    def from_plain_node_schedule(node_sched: PlainNodeSchedule) -> LoopNest:
-        dims = node_sched.dims[:]
+    @classmethod
+    def from_plain_node_schedule(cls, node_sched: PlainNodeSchedule) -> LoopNest:
+        top_name = node_sched.node_name
+        root_node = cls._get_loop_node(top_name, node_sched.node_name, node_sched)
+        return LoopNest(abstract_dims=node_sched.dims[:], root_node=root_node)
 
-        loop_nest = LoopNest(abstract_dims=dims)
-        root_node = loop_nest.build_root_node(node_sched.node_name)
+    @classmethod
+    def _get_single_node(
+        cls,
+        top_name: str,
+        full_name: str,
+        node_sched: PlainNodeSchedule,
+        parent: LoopNestNode | None = None,
+        split_origin: SplitOrigin | None = None,
+    ) -> LoopNestNode:
+        def is_node_axis(axis: str):
+            return parent_name(rooted_name(axis, top_name)) == full_name
 
-        # Assign splits to root_node first, stripping the root prefix from names
-        for axis, axis_splits in node_sched.splits.items():
-            root_node.splits[axis] = {basename(k): v for k, v in axis_splits.items()}
+        def is_node_root(name: str):
+            return rooted_name(name, top_name) == full_name
 
-        # Build mapper to get splits_info
-        mapper = LoopInfo.build_from_node(root_node)
+        def localize_axis_list(axis_list: list[str]) -> list[str]:
+            return [basename(axis) for axis in axis_list if is_node_axis(axis)]
 
-        def populate_node(node: LoopNestNode, perm: list[str]) -> None:
-            """Populate node with data for loops in its permutation."""
-            perm_set = set(perm)
-            node.interchange = [basename(n) for n in perm]
-            for axis, axis_tiles in node_sched.tiles.items():
-                for tile_name, size in axis_tiles.items():
-                    if tile_name in perm_set:
-                        if axis not in node.tiles:
-                            node.tiles[axis] = {}
-                        node.tiles[axis][basename(tile_name)] = size
-            node.vectorize = [
-                basename(v) for v in node_sched.vectorization if v in perm_set
-            ]
-            node.parallelize = [
-                basename(p) for p in node_sched.parallelization if p in perm_set
-            ]
-            node.unroll = {
-                basename(k): v for k, v in node_sched.unrolling.items() if k in perm_set
+        def localize_axis_dict(axis_dict: dict[str, Any]) -> dict[str, Any]:
+            return {
+                basename(axis): v for axis, v in axis_dict.items() if is_node_axis(axis)
             }
-            # TODO: loop nest supports only one buffer per axis
-            node.buffer_at = {
-                basename(k): v[0]
-                for k, v in node_sched.write_buffers.items()
-                if k in perm_set
-            }
-            # TODO: loop nest supports only one pack per axis
-            node.pack_at = {
-                basename(k): v[0]
-                for k, v in node_sched.packed_buffers.items()
-                if k in perm_set
-            }
-            # TODO: loop nest supports only one fuse per axis
-            node.fuse_producer_at = {
-                basename(k): v for k, v in node_sched.fused if k in perm_set
-            }
-            # TODO: loop nest supports only one fuse consumer per axis
-            node.fuse_consumer_at = [
-                basename(k) for k in node_sched.fused_consumers if k in perm_set
+
+        def localize_axis_tuples(
+            axis_tuples: list[tuple[str, Any]],
+        ) -> list[tuple[str, Any]]:
+            return [
+                (basename(axis), v) for axis, v in axis_tuples if is_node_axis(axis)
             ]
 
-        # Process each root in permutation
-        for root, perm in node_sched.permutation.items():
-            root_name = basename(root)
-            if root_name in mapper.splits_info:
-                # This root is a split - create child node
-                axis, start, end = mapper.splits_info[root_name]
-                child = LoopNestNode(
-                    root=root_name,
-                    tiles={d: {} for d in dims},
-                    split_origin=SplitOrigin(axis=axis, start=start, end=end),
-                )
-                populate_node(child, perm)
-                root_node.add_child(child)
-            else:
-                # This is the main root
-                populate_node(root_node, perm)
+        perms = {
+            full_name: v for p, v in node_sched.permutation.items() if is_node_root(p)
+        }
+        interchange = [basename(p) for p in perms[full_name]]
+        splits = {
+            basename(axis): {basename(k): v for k, v in node_sched.splits[axis].items()}
+            for axis in node_sched.splits
+            if is_node_axis(axis)
+        }
+        tiles = {
+            basename(axis): {
+                basename(tile_name): size for tile_name, size in axis_tiles.items()
+            }
+            for axis, axis_tiles in node_sched.tiles.items()
+            if is_node_axis(axis)
+        }
+        vectorize = localize_axis_list(node_sched.vectorization)
+        parallelize = localize_axis_list(node_sched.parallelization)
+        unroll = localize_axis_dict(node_sched.unrolling)
+        # TODO: loop nest supports only one buffer per axis
+        buffer_at = {
+            basename(axis): v[0]
+            for axis, v in node_sched.write_buffers.items()
+            if is_node_axis(axis)
+        }
+        # TODO: loop nest supports only one pack per axis
+        pack_at = {
+            basename(axis): v[0]
+            for axis, v in node_sched.packed_buffers.items()
+            if is_node_axis(axis)
+        }
+        # TODO: loop nest supports only one fuse per axis
+        fuse_producer_at = dict(localize_axis_tuples(node_sched.fused))
+        # TODO: loop nest supports only one fuse consumer per axis
+        fuse_consumer_at = localize_axis_list(node_sched.fused_consumers)
 
-        return loop_nest
+        return LoopNestNode(
+            root=basename(full_name),
+            interchange=interchange,
+            tiles=tiles,
+            vectorize=vectorize,
+            parallelize=parallelize,
+            unroll=unroll,
+            buffer_at=buffer_at,
+            pack_at=pack_at,
+            fuse_producer_at=fuse_producer_at,
+            fuse_consumer_at=fuse_consumer_at,
+            splits=splits,
+            parent=parent,
+            split_origin=split_origin,
+        )
+
+    @classmethod
+    def _get_loop_node(
+        cls,
+        top_name: str,
+        full_name: str,
+        node_sched: PlainNodeSchedule,
+        parent: LoopNestNode | None = None,
+        split_origin: SplitOrigin | None = None,
+    ) -> LoopNestNode:
+        node = cls._get_single_node(
+            top_name,
+            full_name,
+            node_sched,
+            parent,
+            split_origin,
+        )
+        mapper = LoopInfo.build_from_node(node)
+        # TODO: sort children by permutation
+        for root, (axis, start, end) in mapper.splits_info.items():
+            split_origin = SplitOrigin(axis, start, end)
+            child = cls._get_loop_node(
+                top_name,
+                make_loop_name(full_name, root),
+                node_sched,
+                node,
+                split_origin,
+            )
+            node.add_child(child)
+        return node

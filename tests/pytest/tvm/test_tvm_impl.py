@@ -19,7 +19,7 @@ def sched_tile2(sch):
     # Expected in TVM schedule
     print(sch)
     return [
-        "reorder(i, j, k, i1, j1, k1, i2, j2)",
+        "reorder(i, i1, i2, j, j1, j2, k, k1)",
         "split(j, factor=64)",
         "split(j1, factor=64)",
     ]

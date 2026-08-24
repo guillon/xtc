@@ -7,7 +7,7 @@ from typing import Any
 
 import xtc.itf as itf
 from xtc.itf.schd.scheduler import DEFAULT_ROOT
-from xtc.schedules.loop_nest import LoopNest
+from xtc.schedules.loop_nest import LoopNest, LoopNestNode
 import xtc.backends.jir as backend
 
 __all__ = [
@@ -359,26 +359,34 @@ class JIRScheduler(itf.schd.Scheduler):
         transformer = self._transformer
         dims = list(transformer.dims.keys())
 
-        loop_nest = LoopNest(abstract_dims=dims)
-        root_node = loop_nest.build_root_node(self._backend.payload_name)
-
         # Build tiles mapping
-        for axis, axis_tiles in transformer.tiles.items():
-            for tile_name, size in axis_tiles.items():
-                root_node.tiles[axis][tile_name] = size
+        tiles = {
+            axis: {tile_name: size for tile_name, size in axis_tiles.items()}
+            for axis, axis_tiles in transformer.tiles.items()
+        }
 
         # Build interchange
-        root_node.interchange = (
-            list(transformer.order) if transformer.order else dims[:]
-        )
+        interchange = list(transformer.order) if transformer.order else dims[:]
 
         # Build vectorization list
-        root_node.vectorize = list(transformer.vectorized)
+        vectorize = list(transformer.vectorized)
 
         # Build parallelization list
-        root_node.parallelize = list(transformer.parallelized)
+        parallelize = list(transformer.parallelized)
 
         # Build unroll mapping
-        root_node.unroll = dict(transformer.unrolled)
+        unroll = dict(transformer.unrolled)
 
+        root_node = LoopNestNode(
+            root=self._backend.payload_name,
+            tiles=tiles,
+            interchange=interchange,
+            vectorize=vectorize,
+            parallelize=parallelize,
+            unroll=unroll,
+        )
+        loop_nest = LoopNest(
+            abstract_dims=dims,
+            root_node=root_node,
+        )
         return loop_nest
