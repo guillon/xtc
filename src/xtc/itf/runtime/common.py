@@ -102,7 +102,6 @@ class CommonRuntimeInterface(ABC):
         min_repeat_ms: int,
         cfunc: CFunc,
         args: Any,
-        codes: Any,
         nargs: int,
     ) -> None:
         """Evaluate a packed function with timing measurements.
@@ -114,7 +113,6 @@ class CommonRuntimeInterface(ABC):
             min_repeat_ms: Minimum time in milliseconds for each repeat.
             cfunc: Packed function pointer to evaluate.
             args: Pointer to array of packed arguments.
-            codes: Pointer to array of integers containing argument type codes.
             nargs: Number of arguments.
         """
         ...
@@ -129,7 +127,6 @@ class CommonRuntimeInterface(ABC):
         min_repeat_ms: int,
         cfunc: CFunc,
         args: Any,
-        codes: Any,
         nargs: int,
     ) -> None:
         """Evaluate a packed function with performance counter measurements.
@@ -142,7 +139,6 @@ class CommonRuntimeInterface(ABC):
             min_repeat_ms: Minimum time in milliseconds for each repeat.
             cfunc: Packed function pointer to evaluate.
             args: Pointer to array of packed arguments.
-            codes: Pointer to array of integers containing argument type codes.
             nargs: Number of arguments.
         """
         ...

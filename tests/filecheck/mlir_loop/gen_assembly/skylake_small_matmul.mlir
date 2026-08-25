@@ -23,9 +23,7 @@ func.func @myfun(
     outs(%C : memref<8x8xf32>)
   return
 }
-// CHECK:       Disassembly of section .text:
-// CHECK-NEXT:  
-// CHECK-NEXT:  <myfun>:
+// CHECK:       <myfun>:
 // CHECK-NEXT:  	vmovups (%rsi),%ymm0
 // CHECK-NEXT:  	vmovups 0x20(%rsi),%ymm1
 // CHECK-NEXT:  	vmovups 0x40(%rsi),%ymm2
@@ -57,4 +55,4 @@ func.func @myfun(
 // CHECK-NEXT:  	add    $0x20,%rcx
 // CHECK-NEXT:  	cmp    $0x7,%rax
 // CHECK-NEXT:  	jb     <myfun+0x40>
-// CHECK-NEXT:  	vzeroupper 
+// CHECK-NEXT:  	vzeroupper

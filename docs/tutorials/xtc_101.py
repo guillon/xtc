@@ -740,7 +740,6 @@ def _(mo, run_exploration):
         value=
 '''import xtc.graphs.xtc.op as O
 from xtc.graphs.xtc.graph import XTCGraph
-from xtc.backends.tvm import Backend as TVM_Backend
 from xtc.backends.mlir import Backend as MLIR_Backend
 from xtc.schedules.descript import descript_scheduler
 from xtc.runtimes.host import HostRuntime

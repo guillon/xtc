@@ -7,106 +7,114 @@ import ctypes
 
 __all__ = [
     "CFunc",
-    "CArgValue",
-    "CArgCode",
-    "CRetValue",
-    "CPackedFunc",
     "_c_ascii_str",
     "_str_list_to_c",
 ]
 
 
-class ArgTypeCode:
-    INT = 0
-    HANDLE = 3
-    NDARRAY_HANDLE = 13
-
-
-CArgCode = ctypes.c_int
-
-
-class CArgValue(ctypes.Union):
+# TVM 0.26 FFI ABI
+class CTVMFFIAnyValue(ctypes.Union):
     _fields_ = [
         ("v_int64", ctypes.c_int64),
         ("v_float64", ctypes.c_double),
-        ("v_handle", ctypes.c_void_p),
-        ("v_str", ctypes.c_char_p),
+        ("v_ptr", ctypes.c_void_p),
+        ("v_c_str", ctypes.c_char_p),
+        ("v_uint64", ctypes.c_uint64),
     ]
 
 
-class CRetValue(CArgValue):
-    pass
+class CTVMFFIAny(ctypes.Structure):
+    _anonymous_ = ("value",)
+
+    _fields_ = [
+        ("type_index", ctypes.c_int32),
+        ("zero_padding", ctypes.c_uint32),
+        ("value", CTVMFFIAnyValue),
+    ]
 
 
-CPackedFunc = ctypes.CFUNCTYPE(
-    ctypes.c_int,
-    ctypes.POINTER(CArgValue),
-    ctypes.POINTER(CArgCode),
-    ctypes.c_int,
-    ctypes.POINTER(CRetValue),
-    ctypes.POINTER(CArgCode),
+class CTVMFFINDArrayArg(CTVMFFIAny):
+    def __init__(self, arg: Any):
+        assert arg.__class__.__name__ == "NDArray"
+        dl_tensor = arg.handle
+        super().__init__(
+            type_index=7, zero_padding=0, v_ptr=ctypes.cast(dl_tensor, ctypes.c_void_p)
+        )
+
+
+class CTVMFFIResult(CTVMFFIAny):
+    def __init__(self):
+        super().__init__()
+
+
+CTVMFFIPackedFunc = ctypes.CFUNCTYPE(
+    ctypes.c_int32,
+    ctypes.c_void_p,
+    ctypes.POINTER(CTVMFFIAny),
+    ctypes.c_int32,
+    ctypes.POINTER(CTVMFFIAny),
 )
 
 
 class CFunc:
-    def __init__(self, f: Any, packed: bool = False) -> None:
-        self.handle = f
-        self.is_packed = packed or (
-            hasattr(self.handle, "packed") and self.handle.packed
-        )
+    _supported_abis = ["bare", "tvm_ffi"]
 
-    def arg_tuple(self, arg: Any) -> Any:
+    def __init__(self, f: Any, abi: str | None = None) -> None:
+        self.handle = f
+        self.abi = abi
+        if self.abi is None:
+            if hasattr(self.handle, "packed") and self.handle.packed:
+                # TODO: for now infer tvm_ffi abi for packed
+                self.abi = "tvm_ffi"
+        if self.abi is None:
+            self.abi = "bare"
+        assert self.abi in self._supported_abis
+
+    def _mangled_arg(self, arg: Any) -> Any:
         if arg.__class__.__name__ == "ndarray":  # Numpy Array
-            assert not self.is_packed
-            return (arg.ctypes.data_as(ctypes.c_voidp), ArgTypeCode.HANDLE)
+            assert self.abi == "bare"
+            return arg.ctypes.data_as(ctypes.c_voidp)
         elif arg.__class__.__name__ == "NDArray":  # TVM NDArray or our NDArray
             if (
                 hasattr(arg, "is_on_device") and arg.is_on_device()
             ):  # Device living NDArray
-                if self.is_packed:
-                    raise RuntimeError("TODO: device NDArray not supported yet")
-                else:
-                    return (
-                        ctypes.cast(arg.data, ctypes.c_void_p),
-                        ArgTypeCode.HANDLE,
-                    )
-            if self.is_packed:
-                return (
-                    CArgValue(v_handle=ctypes.cast(arg.handle, ctypes.c_void_p)),
-                    ArgTypeCode.NDARRAY_HANDLE,
-                )
+                assert self.abi == "bare", "TODO: device NDArray not supported yet"
+            if self.abi == "tvm_ffi":
+                assert self.abi == "tvm_ffi"
+                return CTVMFFINDArrayArg(arg)
             else:
-                return (
-                    ctypes.cast(arg.handle.contents.dl_tensor.data, ctypes.c_void_p),
-                    ArgTypeCode.HANDLE,
-                )
+                assert self.abi == "bare"
+                return ctypes.cast(arg.data, ctypes.c_voidp)
         else:
             assert 0, f"Unsupported argument class: {arg.__class__.__name__}"
 
-    def args_tuples(self, args: Any) -> list[Any]:
-        return [self.arg_tuple(arg) for arg in args]
+    def get_args_list(self, args: list[Any]) -> list[Any]:
+        return [self._mangled_arg(arg) for arg in args]
+
+    def get_ctypes_args(self, args: list[Any]) -> Any:
+        args_list = self.get_args_list(args)
+        if self.abi == "tvm_ffi":
+            return (CTVMFFIAny * len(args_list))(*args_list)
+        else:
+            return (ctypes.c_voidp * len(args_list))(*args_list)
 
     def __call__(self, *args: Any):
-        args_tuples = self.args_tuples(args)
-        if self.is_packed:
-            args_array = (CArgValue * len(args_tuples))(
-                *[arg[0] for arg in args_tuples]
+        func_addr = ctypes.cast(self.handle, ctypes.c_voidp).value
+        assert func_addr is not None
+        ctypes_args = self.get_ctypes_args(list(args))
+        if self.abi == "tvm_ffi":
+            result = CTVMFFIResult()
+            ctx = ctypes.c_void_p()
+            CTVMFFIPackedFunc(func_addr)(
+                ctx,
+                ctypes_args,
+                len(ctypes_args),
+                ctypes.byref(result),
             )
-            args_codes = (CArgCode * len(args_tuples))(*[arg[1] for arg in args_tuples])
-            result_val = CRetValue(0)
-            result_code = CArgCode(ArgTypeCode.INT)
-            res = CPackedFunc(self.handle)(
-                args_array,
-                args_codes,
-                len(args_tuples),
-                ctypes.byref(result_val),
-                ctypes.byref(result_code),
-                ctypes.c_int(len(args_tuples)),
-            )
-            assert res == 0, f"error calling packed function"
+            assert result.v_int64 == 0, f"error calling packed function"
         else:
-            data_args = [arg[0] for arg in args_tuples]
-            self.handle(*data_args)
+            func_type = ctypes.CFUNCTYPE(None, *([ctypes.c_void_p] * len(ctypes_args)))
+            func_type(func_addr)(*ctypes_args)
 
 
 class _c_ascii_str:

@@ -337,7 +337,7 @@ class TVMOperatorRelu(TVMOperator):
             O = topi.reshape(A, newshape=(size,))
         O = te.compute(
             (Ki,),
-            lambda i,: tvm.tir.max(self.attrs["threshold"], O[i]),
+            lambda i,: tvm.tirx.max(self.attrs["threshold"], O[i]),
             name=self.name,
         )
         if shape != newshape:
@@ -486,11 +486,11 @@ class TVMOperatorPad(TVMOperator):
                 indexes = [i - padding[0] for i in indexes]
             return tuple(indexes)
 
-        def get_args_bounds(*args: int) -> list[tvm.tir.PrimExpr]:
+        def get_args_bounds(*args: int) -> list[Any]:
             indexes = list(args)
             if isinstance(padding, dict):
                 return [
-                    tvm.tir.all(
+                    tvm.tirx.all(
                         indexes[i] - pad_b >= 0,
                         indexes[i] - pad_b < dims_values_all[i],
                     )
@@ -498,7 +498,7 @@ class TVMOperatorPad(TVMOperator):
                 ]
             else:
                 return [
-                    tvm.tir.all(
+                    tvm.tirx.all(
                         index - padding[0] >= 0,
                         index - padding[0] < dims_values_all[i],
                     )
@@ -508,8 +508,8 @@ class TVMOperatorPad(TVMOperator):
         O = te.compute(
             tuple(dims_values),
             lambda *args: (
-                tvm.tir.if_then_else(
-                    tvm.tir.all(*get_args_bounds(*args)),
+                tvm.tirx.if_then_else(
+                    tvm.tirx.all(*get_args_bounds(*args)),
                     A[get_indexes(*args)],
                     constant_value,
                 )

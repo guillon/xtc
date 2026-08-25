@@ -45,68 +45,85 @@ print(f"CODE: {res}")
 # CHECK-NEXT:    - %5: unpad(%4, padding=(0, 2)) {name = 'C'} : [16x16xfloat32] -> [14x14xfloat32]
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
-# CHECK-NEXT:  # from tvm.script import tir as T
+# CHECK-NEXT:  # from tvm.script import tirx as T
+# CHECK-NEXT:  # from tvm.tirx.layout import Axis
 # CHECK-NEXT:  
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
-# CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(_0: T.Buffer((14, 14), "float32"), _1: T.Buffer((14, 14), "float32"), C: T.Buffer((14, 14), "float32")):
-# CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          A_pad = T.allocate([224], "float32", "global")
-# CHECK-NEXT:          B_pad = T.allocate([224], "float32", "global")
-# CHECK-NEXT:          matmul_padded = T.allocate([196], "float32", "global")
-# CHECK-NEXT:          A_pad_1 = T.Buffer((224,), data=A_pad)
-# CHECK-NEXT:          for i0, i1 in T.grid(14, 16):
-# CHECK-NEXT:              _0_1 = T.Buffer((196,), data=_0.data)
-# CHECK-NEXT:              A_pad_1[i0 * 16 + i1] = T.if_then_else(i1 < 14, _0_1[i0 * 14 + i1], T.float32(0.0))
-# CHECK-NEXT:          B_pad_1 = T.Buffer((224,), data=B_pad)
-# CHECK-NEXT:          for i0, i1 in T.grid(16, 14):
-# CHECK-NEXT:              cse_var_1: T.int32 = i0 * 14 + i1
-# CHECK-NEXT:              _1_1 = T.Buffer((196,), data=_1.data)
-# CHECK-NEXT:              B_pad_1[cse_var_1] = T.if_then_else(i0 < 14, _1_1[cse_var_1], T.float32(0.0))
-# CHECK-NEXT:          matmul_padded_1 = T.Buffer((196,), data=matmul_padded)
-# CHECK-NEXT:          for i, j in T.grid(14, 14):
-# CHECK-NEXT:              matmul_padded_1[i * 14 + j] = T.float32(0.0)
-# CHECK-NEXT:              for k in range(16):
-# CHECK-NEXT:                  cse_var_2: T.int32 = i * 14 + j
-# CHECK-NEXT:                  matmul_padded_1[cse_var_2] = matmul_padded_1[cse_var_2] + A_pad_1[i * 16 + k] * B_pad_1[k * 14 + j]
+# CHECK-NEXT:      @T.prim_func(s_tir=True)
+# CHECK-NEXT:      def pad_matmul_unpad(_0: T.Buffer((14, 14), "float32"), _1: T.Buffer((14, 14), "float32"), C: T.Buffer((14, 14), "float32")):
+# CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
+# CHECK-NEXT:          # with T.sblock("root"):
+# CHECK-NEXT:          A_pad = T.sblock_alloc_buffer((16, 16))
+# CHECK-NEXT:          B_pad = T.sblock_alloc_buffer((16, 16))
+# CHECK-NEXT:          matmul_padded = T.sblock_alloc_buffer((16, 16))
+# CHECK-NEXT:          for i0, i1 in T.grid(16, 16):
+# CHECK-NEXT:              with T.sblock("A_pad"):
+# CHECK-NEXT:                  v_i0, v_i1 = T.axis.remap("SS", [i0, i1])
+# CHECK-NEXT:                  T.reads(_0[v_i0, v_i1])
+# CHECK-NEXT:                  T.writes(A_pad[v_i0, v_i1])
+# CHECK-NEXT:                  A_pad[v_i0, v_i1] = T.if_then_else(0 <= v_i0 and v_i0 < 14 and 0 <= v_i1 and v_i1 < 14, _0[v_i0, v_i1], T.float32(0.0))
+# CHECK-NEXT:          for i0, i1 in T.grid(16, 16):
+# CHECK-NEXT:              with T.sblock("B_pad"):
+# CHECK-NEXT:                  v_i0, v_i1 = T.axis.remap("SS", [i0, i1])
+# CHECK-NEXT:                  T.reads(_1[v_i0, v_i1])
+# CHECK-NEXT:                  T.writes(B_pad[v_i0, v_i1])
+# CHECK-NEXT:                  B_pad[v_i0, v_i1] = T.if_then_else(0 <= v_i0 and v_i0 < 14 and 0 <= v_i1 and v_i1 < 14, _1[v_i0, v_i1], T.float32(0.0))
+# CHECK-NEXT:          for i, j, k in T.grid(16, 16, 16):
+# CHECK-NEXT:              with T.sblock("matmul_padded"):
+# CHECK-NEXT:                  v_i, v_j, v_k = T.axis.remap("SSR", [i, j, k])
+# CHECK-NEXT:                  T.reads(A_pad[v_i, v_k], B_pad[v_k, v_j])
+# CHECK-NEXT:                  T.writes(matmul_padded[v_i, v_j])
+# CHECK-NEXT:                  with T.init():
+# CHECK-NEXT:                      matmul_padded[v_i, v_j] = T.float32(0.0)
+# CHECK-NEXT:                  matmul_padded[v_i, v_j] = matmul_padded[v_i, v_j] + A_pad[v_i, v_k] * B_pad[v_k, v_j]
 # CHECK-NEXT:          for i0, i1 in T.grid(14, 14):
-# CHECK-NEXT:              cse_var_3: T.int32 = i0 * 14 + i1
-# CHECK-NEXT:              C_1 = T.Buffer((196,), data=C.data)
-# CHECK-NEXT:              C_1[cse_var_3] = matmul_padded_1[cse_var_3]
-# CHECK-NEXT:  O = obj['matmul_padded']
-# CHECK-NEXT:  i, j, = O.op.axis
-# CHECK-NEXT:  k, = O.op.reduce_axis
-# CHECK-NEXT:  sch[O].reorder(i, j, k)
+# CHECK-NEXT:              with T.sblock("C"):
+# CHECK-NEXT:                  v_i0, v_i1 = T.axis.remap("SS", [i0, i1])
+# CHECK-NEXT:                  T.reads(matmul_padded[v_i0, v_i1])
+# CHECK-NEXT:                  T.writes(C[v_i0, v_i1])
+# CHECK-NEXT:                  C[v_i0, v_i1] = matmul_padded[v_i0, v_i1]
+# CHECK-NEXT:  O = sch.get_sblock("matmul_padded")
+# CHECK-NEXT:  i, j, k, = sch.get_loops(O)
+# CHECK-NEXT:  sch.reorder(i, j, k)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
-# CHECK-NEXT:  # from tvm.script import tir as T
+# CHECK-NEXT:  # from tvm.script import tirx as T
+# CHECK-NEXT:  # from tvm.tirx.layout import Axis
 # CHECK-NEXT:  
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
-# CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(_0: T.Buffer((14, 14), "float32"), _1: T.Buffer((14, 14), "float32"), C: T.Buffer((14, 14), "float32")):
-# CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          A_pad = T.allocate([224], "float32", "global")
-# CHECK-NEXT:          B_pad = T.allocate([224], "float32", "global")
-# CHECK-NEXT:          matmul_padded = T.allocate([196], "float32", "global")
-# CHECK-NEXT:          A_pad_1 = T.Buffer((224,), data=A_pad)
-# CHECK-NEXT:          for i0, i1 in T.grid(14, 16):
-# CHECK-NEXT:              _0_1 = T.Buffer((196,), data=_0.data)
-# CHECK-NEXT:              A_pad_1[i0 * 16 + i1] = T.if_then_else(i1 < 14, _0_1[i0 * 14 + i1], T.float32(0.0))
-# CHECK-NEXT:          B_pad_1 = T.Buffer((224,), data=B_pad)
-# CHECK-NEXT:          for i0, i1 in T.grid(16, 14):
-# CHECK-NEXT:              cse_var_1: T.int32 = i0 * 14 + i1
-# CHECK-NEXT:              _1_1 = T.Buffer((196,), data=_1.data)
-# CHECK-NEXT:              B_pad_1[cse_var_1] = T.if_then_else(i0 < 14, _1_1[cse_var_1], T.float32(0.0))
-# CHECK-NEXT:          matmul_padded_1 = T.Buffer((196,), data=matmul_padded)
-# CHECK-NEXT:          for i, j in T.grid(14, 14):
-# CHECK-NEXT:              matmul_padded_1[i * 14 + j] = T.float32(0.0)
-# CHECK-NEXT:              for k in range(16):
-# CHECK-NEXT:                  cse_var_2: T.int32 = i * 14 + j
-# CHECK-NEXT:                  matmul_padded_1[cse_var_2] = matmul_padded_1[cse_var_2] + A_pad_1[i * 16 + k] * B_pad_1[k * 14 + j]
+# CHECK-NEXT:      @T.prim_func(s_tir=True)
+# CHECK-NEXT:      def pad_matmul_unpad(_0: T.Buffer((14, 14), "float32"), _1: T.Buffer((14, 14), "float32"), C: T.Buffer((14, 14), "float32")):
+# CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
+# CHECK-NEXT:          # with T.sblock("root"):
+# CHECK-NEXT:          A_pad = T.sblock_alloc_buffer((16, 16))
+# CHECK-NEXT:          B_pad = T.sblock_alloc_buffer((16, 16))
+# CHECK-NEXT:          matmul_padded = T.sblock_alloc_buffer((16, 16))
+# CHECK-NEXT:          for i0, i1 in T.grid(16, 16):
+# CHECK-NEXT:              with T.sblock("A_pad"):
+# CHECK-NEXT:                  v_i0, v_i1 = T.axis.remap("SS", [i0, i1])
+# CHECK-NEXT:                  T.reads(_0[v_i0, v_i1])
+# CHECK-NEXT:                  T.writes(A_pad[v_i0, v_i1])
+# CHECK-NEXT:                  A_pad[v_i0, v_i1] = T.if_then_else(0 <= v_i0 and v_i0 < 14 and 0 <= v_i1 and v_i1 < 14, _0[v_i0, v_i1], T.float32(0.0))
+# CHECK-NEXT:          for i0, i1 in T.grid(16, 16):
+# CHECK-NEXT:              with T.sblock("B_pad"):
+# CHECK-NEXT:                  v_i0, v_i1 = T.axis.remap("SS", [i0, i1])
+# CHECK-NEXT:                  T.reads(_1[v_i0, v_i1])
+# CHECK-NEXT:                  T.writes(B_pad[v_i0, v_i1])
+# CHECK-NEXT:                  B_pad[v_i0, v_i1] = T.if_then_else(0 <= v_i0 and v_i0 < 14 and 0 <= v_i1 and v_i1 < 14, _1[v_i0, v_i1], T.float32(0.0))
+# CHECK-NEXT:          for i, j, k in T.grid(16, 16, 16):
+# CHECK-NEXT:              with T.sblock("matmul_padded"):
+# CHECK-NEXT:                  v_i, v_j, v_k = T.axis.remap("SSR", [i, j, k])
+# CHECK-NEXT:                  T.reads(A_pad[v_i, v_k], B_pad[v_k, v_j])
+# CHECK-NEXT:                  T.writes(matmul_padded[v_i, v_j])
+# CHECK-NEXT:                  with T.init():
+# CHECK-NEXT:                      matmul_padded[v_i, v_j] = T.float32(0.0)
+# CHECK-NEXT:                  matmul_padded[v_i, v_j] = matmul_padded[v_i, v_j] + A_pad[v_i, v_k] * B_pad[v_k, v_j]
 # CHECK-NEXT:          for i0, i1 in T.grid(14, 14):
-# CHECK-NEXT:              cse_var_3: T.int32 = i0 * 14 + i1
-# CHECK-NEXT:              C_1 = T.Buffer((196,), data=C.data)
-# CHECK-NEXT:              C_1[cse_var_3] = matmul_padded_1[cse_var_3]
+# CHECK-NEXT:              with T.sblock("C"):
+# CHECK-NEXT:                  v_i0, v_i1 = T.axis.remap("SS", [i0, i1])
+# CHECK-NEXT:                  T.reads(matmul_padded[v_i0, v_i1])
+# CHECK-NEXT:                  T.writes(C[v_i0, v_i1])
+# CHECK-NEXT:                  C[v_i0, v_i1] = matmul_padded[v_i0, v_i1]
 # CHECK-NEXT:  CODE: 0

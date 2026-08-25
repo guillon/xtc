@@ -128,7 +128,6 @@ class HostRuntime(CommonRuntimeInterface):
         min_repeat_ms: int,
         cfunc: CFunc,
         args: Any,
-        codes: Any,
         nargs: int,
     ) -> None:
         self.__get_runtime_func("evaluate_packed")(
@@ -138,7 +137,6 @@ class HostRuntime(CommonRuntimeInterface):
             ctypes.c_int(min_repeat_ms),
             ctypes.cast(cfunc.handle, ctypes.CFUNCTYPE(ctypes.c_voidp)),
             ctypes.cast(args, ctypes.POINTER(ctypes.c_voidp)),
-            ctypes.cast(codes, ctypes.POINTER(ctypes.c_int)),
             ctypes.c_int(nargs),
         )
 
@@ -152,7 +150,6 @@ class HostRuntime(CommonRuntimeInterface):
         min_repeat_ms: int,
         cfunc: CFunc,
         args: Any,
-        codes: Any,
         nargs: int,
     ) -> None:
         self.__get_runtime_func("evaluate_packed_perf")(
@@ -164,7 +161,6 @@ class HostRuntime(CommonRuntimeInterface):
             ctypes.c_int(min_repeat_ms),
             ctypes.cast(cfunc.handle, ctypes.CFUNCTYPE(ctypes.c_voidp)),
             ctypes.cast(args, ctypes.POINTER(ctypes.c_voidp)),
-            ctypes.cast(codes, ctypes.POINTER(ctypes.c_int)),
             ctypes.c_int(nargs),
         )
 

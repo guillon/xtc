@@ -18,14 +18,18 @@ typedef void (*func4_t)(void *,void *,void *,void *);
 typedef void (*func5_t)(void *,void *,void *,void *,void *);
 typedef void (*func6_t)(void *,void *,void *,void *,void *,void *);
 
-typedef union {
-  int64_t v_int64;
-  double v_float64;
-  void *v_handle;
-  char *v_str;
+typedef struct {
+  int32_t type_index;
+  int32_t zero_padding;    
+  union {
+    int64_t v_int64;
+    double v_float64;
+    void *v_ptr;
+    char *v_str;
+  };
 } PackedArg;
 
-typedef int (*packed_func_t)(PackedArg *, int *, int, PackedArg *, int *);
+typedef int (*packed_func_t)(void *, PackedArg *, int, PackedArg *);
 
 #define mem_barrier() asm("":::"memory")
 
@@ -126,12 +130,13 @@ typedef int (*packed_func_t)(PackedArg *, int *, int, PackedArg *, int *);
 
 void evaluate_packed_perf(double *results, int events_num, const char *events_names[],
                           int repeat, int number, int min_repeat_ms,
-                          packed_func_t func, PackedArg *args, int *codes, int nargs)
+                          packed_func_t func, PackedArg *args, int nargs)
 {
   PackedArg res;
-  int res_code = 0;
+  res.type_index = 0;
+  res.zero_padding = 0;
   res.v_int64 = 0;
-  define_evaluateN(func, args, codes, nargs, &res, &res_code);
+  define_evaluateN(func, NULL, args, nargs, &res);
 }
 
 void evaluate0_perf(double *results, int events_num, const char *events_names[],
@@ -240,9 +245,9 @@ void evaluate(double *results,
 }
 void evaluate_packed(double *results,
                      int repeat, int number, int min_repeat_ms,
-                     packed_func_t func, PackedArg *args, int *codes, int nargs)
+                     packed_func_t func, PackedArg *args, int nargs)
 {
     evaluate_packed_perf(results, 0, NULL,
                          repeat, number, min_repeat_ms,
-                         func, args, codes, nargs);
+                         func, args, nargs);
 }

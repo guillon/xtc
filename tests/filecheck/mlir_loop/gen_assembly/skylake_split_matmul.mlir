@@ -28,9 +28,7 @@ func.func @myfun(
     outs(%C : memref<258x256xf32>)
   return
 }
-// CHECK:       Disassembly of section .text:
-// CHECK-NEXT:  
-// CHECK-NEXT:  <myfun>:
+// CHECK:       <myfun>:
 // CHECK-NEXT:  	xor    %ecx,%ecx
 // CHECK-NEXT:  	mov    %rsi,%rax
 // CHECK-NEXT:  	vmovss (%rdi,%rcx,4),%xmm0

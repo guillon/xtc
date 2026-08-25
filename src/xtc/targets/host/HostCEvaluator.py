@@ -52,10 +52,13 @@ class HostCEvaluator(itf.exec.Evaluator):
         hdrs_path += self._module.headers_path
         hdrs_path = list(dict.fromkeys(hdrs_path))
         hdrs_opts = [f"-I{path}" for path in hdrs_path]
-        ext = ".dylib" if sys.platform == "darwin" else ".so"
+        ext = ".so"
+        if sys.platform == "darwin":
+            sh_opts += " -undefined dynamic_lookup"
+            ext = ".dylib"
         cmd = (
             f"cc {sh_opts} {opts} {' '.join(hdrs_opts)} {' '.join(csrcs)} "
-            f"-o {shlib_name}{ext}"
+            f"-o {shlib_name}{ext} "
         )
         p = subprocess.run(
             shlex.split(cmd), text=True, capture_output=True, cwd=cwd_dir
@@ -88,7 +91,7 @@ class HostCExecutor(itf.exec.Executor):
             module=module,
             repeat=1,
             min_repeat_ms=0,
-            number=1,
+            number=0,
             **kwargs,
         )
 

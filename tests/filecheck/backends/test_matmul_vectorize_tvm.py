@@ -45,55 +45,51 @@ print(f"CODE: {res}")
 # CHECK-NEXT:    - %2: matmul(%0, %1) {name = 'C'} : [4x256xfloat32, 256x32xfloat32] -> [4x32xfloat32]
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
-# CHECK-NEXT:  # from tvm.script import tir as T
+# CHECK-NEXT:  # from tvm.script import tirx as T
+# CHECK-NEXT:  # from tvm.tirx.layout import Axis
 # CHECK-NEXT:  
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
-# CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(_0: T.Buffer((4, 256), "float32"), _1: T.Buffer((256, 32), "float32"), C: T.Buffer((4, 32), "float32")):
-# CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          for i, j in T.grid(4, 32):
-# CHECK-NEXT:              C_1 = T.Buffer((128,), data=C.data)
-# CHECK-NEXT:              C_1[i * 32 + j] = T.float32(0.0)
-# CHECK-NEXT:              for k in range(256):
-# CHECK-NEXT:                  cse_var_1: T.int32 = i * 32 + j
-# CHECK-NEXT:                  _0_1 = T.Buffer((1024,), data=_0.data)
-# CHECK-NEXT:                  _1_1 = T.Buffer((8192,), data=_1.data)
-# CHECK-NEXT:                  C_1[cse_var_1] = C_1[cse_var_1] + _0_1[i * 256 + k] * _1_1[k * 32 + j]
-# CHECK-NEXT:  O = obj['C']
-# CHECK-NEXT:  i, j, = O.op.axis
-# CHECK-NEXT:  k, = O.op.reduce_axis
-# CHECK-NEXT:  j, j0 = sch[O].split(j, factor=24)
-# CHECK-NEXT:  j0, __v_j0 = sch[O].split(j0, factor=8)
-# CHECK-NEXT:  sch[O].reorder(i, j, k, j0, __v_j0)
-# CHECK-NEXT:  sch[O].unroll(j0)
-# CHECK-NEXT:  sch[O].vectorize(__v_j0)
+# CHECK-NEXT:      @T.prim_func(s_tir=True)
+# CHECK-NEXT:      def matmul(_0: T.Buffer((4, 256), "float32"), _1: T.Buffer((256, 32), "float32"), C: T.Buffer((4, 32), "float32")):
+# CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
+# CHECK-NEXT:          # with T.sblock("root"):
+# CHECK-NEXT:          for i, j, k in T.grid(4, 32, 256):
+# CHECK-NEXT:              with T.sblock("C"):
+# CHECK-NEXT:                  v_i, v_j, v_k = T.axis.remap("SSR", [i, j, k])
+# CHECK-NEXT:                  T.reads(_0[v_i, v_k], _1[v_k, v_j])
+# CHECK-NEXT:                  T.writes(C[v_i, v_j])
+# CHECK-NEXT:                  with T.init():
+# CHECK-NEXT:                      C[v_i, v_j] = T.float32(0.0)
+# CHECK-NEXT:                  C[v_i, v_j] = C[v_i, v_j] + _0[v_i, v_k] * _1[v_k, v_j]
+# CHECK-NEXT:  O = sch.get_sblock("C")
+# CHECK-NEXT:  i, j, k, = sch.get_loops(O)
+# CHECK-NEXT:  j, j0, __v_j0, = sch.split(j, factors=[None, 3, 8])
+# CHECK-NEXT:  sch.reorder(i, j, k, j0, __v_j0)
+# CHECK-NEXT:  sch.unroll(j0)
+# CHECK-NEXT:  sch.vectorize(__v_j0)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
-# CHECK-NEXT:  # from tvm.script import tir as T
+# CHECK-NEXT:  # from tvm.script import tirx as T
+# CHECK-NEXT:  # from tvm.tirx.layout import Axis
 # CHECK-NEXT:  
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
-# CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(_0: T.Buffer((4, 256), "float32"), _1: T.Buffer((256, 32), "float32"), C: T.Buffer((4, 32), "float32")):
-# CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          for i, j_outer in T.grid(4, 2):
-# CHECK-NEXT:              C_1 = T.Buffer((128,), data=C.data)
-# CHECK-NEXT:              C_1[i * 32 + j_outer * 24:i * 32 + j_outer * 24 + 8] = T.Broadcast(T.float32(0.0), 8)
-# CHECK-NEXT:              if T.likely(j_outer < 1):
-# CHECK-NEXT:                  C_1[i * 32 + j_outer * 24 + 8:i * 32 + j_outer * 24 + 8 + 8] = T.Broadcast(T.float32(0.0), 8)
-# CHECK-NEXT:              if T.likely(j_outer < 1):
-# CHECK-NEXT:                  C_1[i * 32 + j_outer * 24 + 16:i * 32 + j_outer * 24 + 16 + 8] = T.Broadcast(T.float32(0.0), 8)
-# CHECK-NEXT:              for k in range(256):
-# CHECK-NEXT:                  cse_var_2: T.int32 = j_outer * 24
-# CHECK-NEXT:                  cse_var_1: T.int32 = i * 32 + cse_var_2
-# CHECK-NEXT:                  _0_1 = T.Buffer((1024,), data=_0.data)
-# CHECK-NEXT:                  _1_1 = T.Buffer((8192,), data=_1.data)
-# CHECK-NEXT:                  C_1[cse_var_1:cse_var_1 + 8] = C_1[cse_var_1:cse_var_1 + 8] + T.Broadcast(_0_1[i * 256 + k], 8) * _1_1[k * 32 + cse_var_2:k * 32 + cse_var_2 + 8]
-# CHECK-NEXT:                  if T.likely(j_outer < 1):
-# CHECK-NEXT:                      cse_var_3: T.int32 = cse_var_1 + 8
-# CHECK-NEXT:                      C_1[cse_var_3:cse_var_3 + 8] = C_1[cse_var_3:cse_var_3 + 8] + T.Broadcast(_0_1[i * 256 + k], 8) * _1_1[k * 32 + cse_var_2 + 8:k * 32 + cse_var_2 + 8 + 8]
-# CHECK-NEXT:                  if T.likely(j_outer < 1):
-# CHECK-NEXT:                      cse_var_4: T.int32 = cse_var_1 + 16
-# CHECK-NEXT:                      C_1[cse_var_4:cse_var_4 + 8] = C_1[cse_var_4:cse_var_4 + 8] + T.Broadcast(_0_1[i * 256 + k], 8) * _1_1[k * 32 + cse_var_2 + 16:k * 32 + cse_var_2 + 16 + 8]
+# CHECK-NEXT:      @T.prim_func(s_tir=True)
+# CHECK-NEXT:      def matmul(_0: T.Buffer((4, 256), "float32"), _1: T.Buffer((256, 32), "float32"), C: T.Buffer((4, 32), "float32")):
+# CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
+# CHECK-NEXT:          # with T.sblock("root"):
+# CHECK-NEXT:          for i, j_0, k in T.grid(4, 2, 256):
+# CHECK-NEXT:              for j_1 in T.unroll(3):
+# CHECK-NEXT:                  for j_2 in T.vectorized(8):
+# CHECK-NEXT:                      with T.sblock("C"):
+# CHECK-NEXT:                          v_i = T.axis.spatial(4, i)
+# CHECK-NEXT:                          v_j = T.axis.spatial(32, j_0 * 24 + j_1 * 8 + j_2)
+# CHECK-NEXT:                          v_k = T.axis.reduce(256, k)
+# CHECK-NEXT:                          T.where((j_0 * 3 + j_1) * 8 + j_2 < 32)
+# CHECK-NEXT:                          T.reads(_0[v_i, v_k], _1[v_k, v_j])
+# CHECK-NEXT:                          T.writes(C[v_i, v_j])
+# CHECK-NEXT:                          with T.init():
+# CHECK-NEXT:                              C[v_i, v_j] = T.float32(0.0)
+# CHECK-NEXT:                          C[v_i, v_j] = C[v_i, v_j] + _0[v_i, v_k] * _1[v_k, v_j]
 # CHECK-NEXT:  CODE: 0

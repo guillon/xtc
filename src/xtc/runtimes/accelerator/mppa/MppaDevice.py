@@ -726,7 +726,6 @@ class MppaDevice(AcceleratorDevice):
         min_repeat_ms: int,
         cfunc: CFunc,
         args: Any,
-        codes: Any,
         nargs: int,
     ) -> None:
         raise NotImplementedError("evaluate_packed is not implemented for MPPA device")
@@ -741,7 +740,6 @@ class MppaDevice(AcceleratorDevice):
         min_repeat_ms: int,
         cfunc: CFunc,
         args: Any,
-        codes: Any,
         nargs: int,
     ) -> None:
         raise NotImplementedError(

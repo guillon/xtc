@@ -3,6 +3,7 @@ __marimo__
 *.so
 *.csv
 *.dylib
+*.a
 venv
 .venv
 build
