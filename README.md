@@ -24,7 +24,7 @@ XTC is a domain-specific dataflow graph compiler for linear algebra operations. 
 
 If needed, install uv following the instructions [here](https://docs.astral.sh/uv/).
 
-Debian-like x86_64 Linux distributions (Python: 3.10 to 3.14 inclusive):
+Debian-like x86_64 or aarch64 Linux distributions (Python: 3.10 to 3.14 inclusive):
 ```bash
 sudo apt install python3 python3-dev build-essential libomp5 binutils binutils-aarch64-linux-gnu binutils-x86-64-linux-gnu
 sudo apt install libpfm4-dev # Optional: interface to Linux perf counters

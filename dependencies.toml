@@ -39,19 +39,19 @@ dependencies = [
 [groups.llvm]
 publish = false
 dependencies = [
-    'xtc-llvm-tools==22.1.8.1',
+    'xtc-llvm-tools==22.1.8.2',
 ]
 
 [groups.mlir]
 include = ["llvm"]
 dependencies = [
-    'xtc-mlir-tools==22.1.8.2',
-    'xtc-mlir-python-bindings==22.1.8.2',
-    'xtc-mlir-extra-tools==22.1.8.6',
+    'xtc-mlir-tools==22.1.8.3',
+    'xtc-mlir-python-bindings==22.1.8.3',
+    'xtc-mlir-extra-tools==22.1.8.7',
 ]
 
 [groups.tvm]
 include = ["llvm"]
 dependencies = [
-    'xtc-tvm-python-bindings==0.19.0.11',
+    'xtc-tvm-python-bindings==0.19.0.12',
 ]
