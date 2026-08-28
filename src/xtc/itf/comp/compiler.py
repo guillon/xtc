@@ -28,6 +28,18 @@ class Compiler(ABC):
         """
         ...
 
+    @abstractmethod
+    def get_source_ir(self, schedule: Schedule) -> str:
+        """Return the generated backend IR, as text, before it is applied.
+
+        Args:
+            schedule: the schedule to express in the returned IR
+
+        Returns:
+            The textual representation of the pre-transformation IR.
+        """
+        ...
+
     @property
     @abstractmethod
     def backend(self) -> "xtc.itf.back.Backend":
