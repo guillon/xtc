@@ -47,16 +47,6 @@ jobs:
       - name: Install XTC Package in dev mode
         run: |
           pip install -e .[dev]
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          pip install -r mlir_requirements.txt
-          pip install -r tvm_requirements.txt
-      - name: Install macOS dependencies
-        if: runner.os == 'macOS'
-        run: |
-          pip install -r macos_mlir_requirements.txt
-          pip install -r macos_tvm_requirements.txt
       - name: Dump Environment information
         run: |
           python -c 'import sys; print(sys.version)'

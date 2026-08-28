@@ -31,8 +31,6 @@ sudo apt install libpfm4-dev # Optional: interface to Linux perf counters
 sudo sysctl kernel.perf_event_paranoid=1 # Optional: give access to hardware counters
 uv venv -p 3.12 && source .venv/bin/activate
 uv pip install -e '.[dev]'
-uv pip install -r mlir_requirements.txt
-uv pip install -r tvm_requirements.txt
 make test
 ```
 
@@ -42,10 +40,17 @@ brew install libomp x86_64-linux-gnu-binutils aarch64-elf-binutils
 export DYLD_LIBRARY_PATH="/opt/homebrew/opt/libomp/lib:$DYLD_LIBRARY_PATH"
 uv venv -p 3.12 && source .venv/bin/activate
 uv pip install -e '.[dev]'
-uv pip install -r macos_mlir_requirements.txt
-uv pip install -r macos_tvm_requirements.txt
 make test
 ```
+
+Note that `[dev]` extension installs both `mlir` and `tvm` backends in addition to development tools.
+
+Available extensions are:
+- `[mlir]`: MLIR backend
+- `[tvm]`: TVM backend
+- `[test]`: develop, docs and tests tools
+- `[default]`: mlir + tvm
+- `[dev]`: default + test
 
 ### Code quality
 
@@ -94,6 +99,13 @@ lit -v tests/filecheck/backends/specific_test.py
 # C target for lit tests
 XTC_MLIR_TARGET=c lit -v tests/filecheck/backends/specific_test.py
 ```
+
+### Dependencies update
+
+Python package dependencies are listed in `dependencies.toml` with definition of groups and groups
+dependencies.
+
+Always update dependencies there and run `make dependencies` to update `pyproject.toml` before commit.
 
 ## Architecture
 
