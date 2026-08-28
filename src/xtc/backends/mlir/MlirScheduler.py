@@ -162,7 +162,11 @@ class MlirScheduler(itf.schd.Scheduler):
         self._current_scheduler.pack_at(axis, input_idx, mtype, pad, root=root)
 
     @override
-    def vectorize(self, axes: list[str], root: str = DEFAULT_ROOT) -> None:
+    def vectorize(
+        self,
+        axes: list[str] | dict[str, int | None],
+        root: str = DEFAULT_ROOT,
+    ) -> None:
         self._current_scheduler.vectorize(axes, root=root)
 
     @override
