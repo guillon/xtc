@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from typing_extensions import override
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pprint import pformat
 from copy import deepcopy
 
@@ -33,6 +33,11 @@ class PlainNodeSchedule:
     distributed_buffers: dict[str, dict]
     fused: list[tuple[str, int]]
     fused_consumers: list[str]
+    # Optional caller-provided vector sizes, keyed by vectorized axis name.
+    # When an axis has a size, its dimension is vectorized with masking for
+    # non-divisible extents; axes absent from this mapping are vectorized to
+    # their (static) tile shape.
+    vectorization_sizes: dict[str, int] = field(default_factory=dict)
 
     def index_of_dim(self, dim: str) -> int:
         return self.dims.index(basename(dim))
@@ -100,6 +105,7 @@ class PlainNodeScheduler:
         self.tiles: dict[str, dict[str, int]] = {}
         self.permutation: dict[str, list[str]] = {}
         self.vectorization: list[str] = []
+        self.vectorization_sizes: dict[str, int] = {}
         self.parallelization: list[str] = []
         self.unrolling: dict[str, int] = {}
         self.packed_buffers: dict[str, list[tuple[int, str | None, bool]]] = {}
@@ -131,6 +137,7 @@ class PlainNodeScheduler:
             distributed_buffers=deepcopy(self.distributed_buffers),
             fused=deepcopy(self.fused),
             fused_consumers=deepcopy(self.fused_consumers),
+            vectorization_sizes=deepcopy(self.vectorization_sizes),
         )
 
     @override
@@ -170,8 +177,19 @@ class PlainNodeScheduler:
     def interchange(self, permutation: list[str], root: str = DEFAULT_ROOT):
         self.permutation[root] = [make_loop_name(root, a) for a in permutation]
 
-    def vectorize(self, axes: list[str], root: str = DEFAULT_ROOT):
-        self.vectorization += [make_loop_name(root, a) for a in axes]
+    def vectorize(
+        self,
+        axes: list[str] | dict[str, int | None],
+        root: str = DEFAULT_ROOT,
+    ):
+        # A list is equivalent to a mapping with None (full) widths.
+        widths = axes if isinstance(axes, dict) else {a: None for a in axes}
+        for axis, width in widths.items():
+            loop = make_loop_name(root, axis)
+            self.vectorization.append(loop)
+            # Only explicit widths are recorded; a None means full vectorization.
+            if width is not None:
+                self.vectorization_sizes[loop] = width
 
     def parallelize(self, axes: list[str], root: str = DEFAULT_ROOT):
         self.parallelization += [make_loop_name(root, a) for a in axes]

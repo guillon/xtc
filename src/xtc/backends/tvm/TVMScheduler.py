@@ -533,7 +533,12 @@ class TVMScheduler(itf.schd.Scheduler):
         self._plain_sch.pack_at(axis, input_idx, mtype, pad, root)
 
     @override
-    def vectorize(self, axes: list[str], root: str = DEFAULT_ROOT) -> None:
+    def vectorize(
+        self,
+        # widths are ignored: TVM has no masked vectorize
+        axes: list[str] | dict[str, int | None],
+        root: str = DEFAULT_ROOT,
+    ) -> None:
         self._plain_sch.vectorize(axes, root)
 
     @override

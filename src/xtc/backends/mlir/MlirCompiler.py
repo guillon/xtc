@@ -113,6 +113,20 @@ class MlirCompiler(itf.comp.Compiler):
         # xdsl_func input must be read only
         return MlirProgram(self._backend.xdsl_func, self._backend.no_alias)
 
+    @override
+    def get_source_ir(self, schedule: itf.schd.Schedule) -> str:
+        # The linalg payload plus the schedule expressed as the transform
+        # dialect, before the transform is applied (matches print_source_ir).
+        program = self.generate_program()
+        compiler = MlirProgramCompiler(
+            config=self._config,
+            target=self._target,
+            mlir_program=program,
+            mlir_schedule=cast(MlirSchedule, schedule),
+        )
+        compiler.mlir_insert_transform_pass()
+        return str(program.mlir_module)
+
 
 class MlirProgramCompiler:
     def __init__(

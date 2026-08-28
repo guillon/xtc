@@ -121,6 +121,11 @@ class JIRCompiler(itf.comp.Compiler):
         return self._backend
 
     @override
+    def get_source_ir(self, schedule: itf.schd.Schedule) -> str:
+        # The initial JIR function, before the schedule is applied.
+        return str(self._jir_function_str)
+
+    @override
     def compile(self, schedule: itf.schd.Schedule) -> itf.comp.Module:
         assert isinstance(schedule, JIRSchedule)
         assert self.dump_file is not None

@@ -353,7 +353,7 @@ class MlirProgramInsertTransformPass:
 
             # Manage the strip-mining
             if loop_name in schedule.vectorization:
-                self._vectorize(sched_state)
+                self._vectorize(sched_state, self._vector_sizes_for(schedule))
                 break
             elif loop_name in tiles_sizes_by_loops:
                 self._strip_mine(
@@ -418,18 +418,14 @@ class MlirProgramInsertTransformPass:
         self, schedule: MlirNodeSchedule
     ) -> dict[str, list[int]]:
         tiles_sizes_by_loops: dict[str, list[int]] = {}
-        state_of_tiling: dict[str, int] = {dim: 1 for dim in schedule.dims}
-        candidate_state_of_tiling = state_of_tiling.copy()
+        split_state = SplitState(schedule.splits, "")
+        candidate_state_of_tiling: dict[str, int] = {dim: 1 for dim in schedule.dims}
         previous_root = ""
-        split_state = SplitState(schedule.splits, previous_root)
         for loc_root, permutation in reversed(schedule.permutation.items()):
-            if len(loc_root) == len(previous_root):
-                # Reset the view on the state of tiling (we are jumping into
-                # a split of the same loop)
-                candidate_state_of_tiling = state_of_tiling.copy()
-            else:
-                # Update the state of tiling
-                state_of_tiling = candidate_state_of_tiling.copy()
+            # Carry tiling state up to an ancestor root, but reset it when jumping
+            # to an unrelated subtree so sibling roots don't leak tile steps.
+            if not previous_root.startswith(make_loop_name(loc_root, "")):
+                candidate_state_of_tiling = {dim: 1 for dim in schedule.dims}
             for loop in reversed(permutation):
                 # The loop needs to be base or tile
                 if not (schedule.is_tile(loop) or schedule.is_base(loop)):
@@ -516,7 +512,31 @@ class MlirProgramInsertTransformPass:
 
         return new_loop
 
-    def _vectorize(self, sched_state: SchedulingState):
+    def _vector_sizes_for(self, schedule: MlirNodeSchedule) -> list[int] | None:
+        # Translate the per-axis vector widths into the per-iteration-dim list
+        # expected by `transform.structured.vectorize`. When no axis carries an
+        # explicit width every vectorized axis is "full", which maps to a
+        # size-less vectorize (None) that lets MLIR pick the tile shape.
+        if not schedule.vectorization_sizes:
+            return None
+        # Otherwise the list must be full rank with strictly positive sizes:
+        # non-vectorized dims stay scalar (width 1), an axis with an explicit
+        # width gets it (masked when its extent is not a multiple), and a "full"
+        # axis in the same call falls back to its tile size.
+        sizes = [1] * len(schedule.dims)
+        for axis in schedule.vectorization:
+            width = schedule.vectorization_sizes.get(axis)
+            if width is None:
+                width = schedule.size_of_tile(axis)
+                assert width is not None, (
+                    f"cannot infer a full vector width for '{axis}'"
+                )
+            sizes[schedule.index_of_dim(schedule.dim_of_tile(axis))] = width
+        return sizes
+
+    def _vectorize(
+        self, sched_state: SchedulingState, vector_sizes: list[int] | None = None
+    ):
         if self._vectors_size is not None:
             return
         assert self._named_sequence is not None
@@ -536,6 +556,10 @@ class MlirProgramInsertTransformPass:
 
         if self._target.has_custom_vectorize():
             self._target.apply_custom_vectorize(sched_state.handle)
+        elif vector_sizes is not None:
+            # Caller-provided sizes -> vectorize with masking for non-divisible
+            # dims.
+            VectorizeOp(sched_state.handle, vector_sizes=vector_sizes)
         else:
             transform.IncludeOp(
                 results_=[],

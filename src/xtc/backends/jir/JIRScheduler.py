@@ -84,8 +84,13 @@ class JIRSchedulerAdaptor:
         }
         self._update_loops()
 
-    def vectorize(self, axes: list[str], root: str = DEFAULT_ROOT) -> None:
-        self.vectorized = axes
+    def vectorize(
+        self,
+        # widths are ignored: JIR has no masked vectorize
+        axes: list[str] | dict[str, int | None],
+        root: str = DEFAULT_ROOT,
+    ) -> None:
+        self.vectorized = list(axes)
 
     def parallelize(self, axes: list[str], root: str = DEFAULT_ROOT) -> None:
         self.parallelized = axes
@@ -279,7 +284,12 @@ class JIRScheduler(itf.schd.Scheduler):
         self._transformer.interchange(permutation)
 
     @override
-    def vectorize(self, axes: list[str], root: str = DEFAULT_ROOT) -> None:
+    def vectorize(
+        self,
+        # widths are ignored: JIR has no masked vectorize
+        axes: list[str] | dict[str, int | None],
+        root: str = DEFAULT_ROOT,
+    ) -> None:
         self._transformer.vectorize(axes)
 
     @override

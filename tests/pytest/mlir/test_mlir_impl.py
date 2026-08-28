@@ -54,6 +54,30 @@ def sched_tile3wc(sch):
         "unrolling={'./k1': 13, './i3': 4, './j3': 64}",
     ]
 
+def sched_nested_split(sch):
+    sch.split("i", {"i_top": 0, "i_bot": 6})
+    sch.interchange(["i_top", "i_bot"])
+    i_tile = {"./i_top": 6, "./i_bot": 5}
+    for iroot in ["./i_top", "./i_bot"]:
+        sch.split("j", {"j_top": 0, "j_bot": 32}, root=iroot)
+        sch.interchange(["i", "j_top", "j_bot"], root=iroot)
+        for jname, j_reg in (("j_top", 32), ("j_bot", 8)):
+            leaf = f"{iroot}/{jname}"
+            sch.tile("i", {"i_col": i_tile[iroot]}, root=leaf)
+            sch.tile("j", {"j_reg": j_reg, "j_lane": 8}, root=leaf)
+            sch.interchange(["i", "j", "k", "i_col", "j_reg", "j_lane"], root=leaf)
+            sch.vectorize(["j_lane"], root=leaf)
+            sch.unroll({"i_col": i_tile[iroot], "j_reg": j_reg // 8}, root=leaf)
+    # Expected in MLIR schedule
+    return [
+        "'./i': {'./i_top': 0, './i_bot': 6}",
+        "'./i_top/j': {'./i_top/j_top': 0, './i_top/j_bot': 32}",
+        "'./i_top/j_top/i': {'./i_top/j_top/i_col': 6}",
+        "'./i_bot/j_top/i': {'./i_bot/j_top/i_col': 5}",
+        "vectorization=['./i_top/j_top/j_lane', './i_top/j_bot/j_lane', "
+        "'./i_bot/j_top/j_lane', './i_bot/j_bot/j_lane']",
+    ]
+
 def check_schedule(impl, sched_func):
     sch = impl.get_scheduler()
     expected = sched_func(sch)
@@ -105,4 +129,15 @@ def test_sched_tile3wc():
     impl = matmul_impl(*MATMUL_ARGS, "matmul")
     print(impl.graph)
     schedule = check_schedule(impl, sched_tile3wc)
+    check_evaluate(impl, schedule)
+
+@requires_mlir
+def test_sched_nested_split():
+    # i = 16 (split 6 + 10), j = 40 (split 32 + 8), k = 8: the two i-tiers get
+    # different i-tiles (6 and 5), so a nested-split tiling-state leak would tile
+    # i_top's extent-6 leaf by 5 and fail to vectorize. Evaluating checks the
+    # schedule actually compiles and validates.
+    impl = matmul_impl(16, 40, 8, DTYPE, "matmul")
+    print(impl.graph)
+    schedule = check_schedule(impl, sched_nested_split)
     check_evaluate(impl, schedule)

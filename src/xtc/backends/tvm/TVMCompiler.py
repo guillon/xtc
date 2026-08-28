@@ -82,6 +82,13 @@ class TVMCompiler(itf.comp.Compiler):
     def backend(self) -> itf.back.Backend:
         return self._backend
 
+    @override
+    def get_source_ir(self, schedule: itf.schd.Schedule) -> str:
+        # The initial lowered Tensor IR, before the schedule is applied.
+        op = self._backend._tvm_base
+        expr_compiler = TVMExprCompiler(op, tir_schedule=self._backend._tir_schedule)
+        return expr_compiler.generate().schedule().dumps()
+
     def _save_temp(self, fname: str, content: str) -> None:
         if not self.save_temps:
             return

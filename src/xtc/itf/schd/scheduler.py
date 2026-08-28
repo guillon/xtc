@@ -135,14 +135,30 @@ class Scheduler(ABC):
         ...
 
     @abstractmethod
-    def vectorize(self, axes: list[str], root: str = DEFAULT_ROOT) -> None:
+    def vectorize(
+        self,
+        axes: list[str] | dict[str, int | None],
+        root: str = DEFAULT_ROOT,
+    ) -> None:
         """Apply vectorizations on the given axes names.
 
         The axes names given must all be inner axes and parallel axes, full
         unrolling and vectorization of all given axes is implied.
 
+        Axes can be passed two ways:
+
+        - as a list of names, e.g. ``["j1"]``: each axis is vectorized to its
+          tile shape, letting the backend choose the vector width;
+        - as a mapping name -> width, e.g. ``{"j1": 16}``: each axis is
+          vectorized at the given width, and if the axis extent is not a
+          multiple of that width the leftover elements are masked.
+
+        A width of ``None`` means "no fixed width", so the list ``["j1"]`` is
+        exactly the mapping ``{"j1": None}``. Backends that do not support
+        masked vectorization ignore the widths.
+
         Args:
-            axes: axes names to vectorize
+            axes: axes to vectorize, as names or a name->width mapping
             root: the parent split (or the operator's absolute root)
         """
         ...

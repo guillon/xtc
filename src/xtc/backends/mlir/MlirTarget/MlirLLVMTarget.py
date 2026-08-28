@@ -296,6 +296,7 @@ class MlirProgramToLLVMDialectPass:
             "expand-strided-metadata",
             "convert-linalg-to-loops",
             "lower-affine",
+            "func.func(lower-vector-mask)",
             "convert-vector-to-scf{full-unroll=true}",
             "scf-forall-to-parallel",
             "convert-scf-to-openmp",

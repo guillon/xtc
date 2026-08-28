@@ -55,7 +55,11 @@ class MlirNodeScheduler:
     def interchange(self, permutation: list[str], root: str = DEFAULT_ROOT) -> None:
         self._plain_sch.interchange(permutation, root)
 
-    def vectorize(self, axes: list[str], root: str = DEFAULT_ROOT) -> None:
+    def vectorize(
+        self,
+        axes: list[str] | dict[str, int | None],
+        root: str = DEFAULT_ROOT,
+    ) -> None:
         self._plain_sch.vectorize(axes, root)
 
     def parallelize(self, axes: list[str], root: str = DEFAULT_ROOT) -> None:
