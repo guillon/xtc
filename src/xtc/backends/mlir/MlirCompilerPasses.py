@@ -418,18 +418,14 @@ class MlirProgramInsertTransformPass:
         self, schedule: MlirNodeSchedule
     ) -> dict[str, list[int]]:
         tiles_sizes_by_loops: dict[str, list[int]] = {}
-        state_of_tiling: dict[str, int] = {dim: 1 for dim in schedule.dims}
-        candidate_state_of_tiling = state_of_tiling.copy()
+        split_state = SplitState(schedule.splits, "")
+        candidate_state_of_tiling: dict[str, int] = {dim: 1 for dim in schedule.dims}
         previous_root = ""
-        split_state = SplitState(schedule.splits, previous_root)
         for loc_root, permutation in reversed(schedule.permutation.items()):
-            if len(loc_root) == len(previous_root):
-                # Reset the view on the state of tiling (we are jumping into
-                # a split of the same loop)
-                candidate_state_of_tiling = state_of_tiling.copy()
-            else:
-                # Update the state of tiling
-                state_of_tiling = candidate_state_of_tiling.copy()
+            # Carry tiling state up to an ancestor root, but reset it when jumping
+            # to an unrelated subtree so sibling roots don't leak tile steps.
+            if not previous_root.startswith(make_loop_name(loc_root, "")):
+                candidate_state_of_tiling = {dim: 1 for dim in schedule.dims}
             for loop in reversed(permutation):
                 # The loop needs to be base or tile
                 if not (schedule.is_tile(loop) or schedule.is_base(loop)):
