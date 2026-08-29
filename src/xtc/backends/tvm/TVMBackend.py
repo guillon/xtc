@@ -2,9 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
-import tempfile
 from typing import Any
-from pathlib import Path
 from typing_extensions import override
 
 import xtc.itf as itf
@@ -37,14 +35,14 @@ class TVMBackend(itf.back.Backend):
             self._graph = graph
             self._tvm_base = TVMBaseExpr.from_graph(graph)
             self._ops = self._tvm_base._operations
-            self.payload_name = self._graph.name
+            self._payload_name = self._graph.name
         else:
             assert isinstance(source_op, TVMOperation)
             assert dims is not None
             self._tvm_base = source_op
             assert source_op.name is not None
             self._ops = {source_op.name: source_op}
-            self.payload_name = source_op.name
+            self._payload_name = source_op.name
             assert tuple(dims.keys()) == source_op.operator.dims(), (
                 f"incompatible dims names: {tuple(dims.keys())} != "
                 f"{source_op.operator.dims()}"
@@ -72,27 +70,11 @@ class TVMBackend(itf.back.Backend):
 
     @property
     @override
+    def payload_name(self) -> str:
+        return self._payload_name
+
+    @property
+    @override
     def graph(self) -> itf.graph.Graph:
         assert self._graph is not None
         return self._graph
-
-    def evaluate(
-        self,
-        schedule: itf.schd.Schedule,
-        compiler_args: dict = {},
-        evaluate_args: dict = {},
-    ) -> float | str:
-        with tempfile.TemporaryDirectory() as dirname:
-            libpath = Path(dirname) / f"payload_{self.payload_name}"
-            compiler = self.get_compiler(
-                dump_file=str(libpath),
-                shared_lib=True,
-                **compiler_args,
-            )
-            module = compiler.compile(schedule)
-            evaluator = module.get_evaluator(
-                validate=True,
-                **evaluate_args,
-            )
-            results, code, error_msg = evaluator.evaluate()
-        return min(results) if code == 0 else error_msg

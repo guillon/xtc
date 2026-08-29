@@ -4,8 +4,6 @@
 #
 from typing_extensions import override
 from typing import Any
-from pathlib import Path
-import tempfile
 
 from jir.node import JIRFunction
 from jir.backend.util.annotate_fastmath import annotate_fastmath
@@ -47,13 +45,13 @@ class JIRBackend(itf.back.Backend):
                 for node in graph.nodes.values()
             ]
             self.dims = self.ops[-1].operator.dims_sizes()
-            self.payload_name = self._graph.name
+            self._payload_name = self._graph.name
         else:
             assert isinstance(source_op, JIROperation)
             assert dims is not None
             self.dims = dims
             self.ops = [source_op]
-            self.payload_name = source_op.name
+            self._payload_name = source_op.name
 
         self.op = self.ops[-1]
 
@@ -75,7 +73,7 @@ class JIRBackend(itf.back.Backend):
             )
         self._geist_install_dir = get_geist_prefix()
         self._op_function_str, self._jir_function_str = self.op.generate(
-            self.payload_name
+            self._payload_name
         )
         self._jir_function_op = self._parse_function(self._jir_function_str)
         self._op_function_mlir = self._parse_primitives(self._op_function_str)
@@ -90,30 +88,14 @@ class JIRBackend(itf.back.Backend):
 
     @property
     @override
+    def payload_name(self) -> str:
+        return self._payload_name
+
+    @property
+    @override
     def graph(self) -> itf.graph.Graph:
         assert self._graph is not None
         return self._graph
-
-    def evaluate(
-        self,
-        schedule: itf.schd.Schedule,
-        compiler_args: dict = {},
-        evaluate_args: dict = {},
-    ) -> float | str:
-        with tempfile.TemporaryDirectory() as dirname:
-            libpath = Path(dirname) / f"payload_{self.payload_name}"
-            compiler = self.get_compiler(
-                dump_file=str(libpath),
-                shared_lib=True,
-                **compiler_args,
-            )
-            module = compiler.compile(schedule)
-            evaluator = module.get_evaluator(
-                validate=True,
-                **evaluate_args,
-            )
-            results, code, error_msg = evaluator.evaluate()
-        return min(results) if code == 0 else error_msg
 
     def _parse_function(self, jir_function: str) -> JIRFunction:
         return JIRParser().parse_function(jir_function)
