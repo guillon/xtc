@@ -32,6 +32,7 @@ import xtc.itf as itf
 from xtc.itf.graph import Graph
 
 from .MlirTarget import MlirTarget
+from .cpu_lowering import cpu_frontend_lowering
 from ..MlirConfig import MlirConfig
 from ..MlirProgram import RawMlirProgram
 
@@ -265,31 +266,10 @@ class MlirProgramToStdDialectsPass:
         self._mlir_program = mlir_program
 
     def _lowering_pipeline(self) -> list[str]:
-        pipeline = [
-            "canonicalize",
-            "cse",
-            "sccp",
-        ]
-        if "sdist" in self._mlir_program.mlir_extensions:
-            pipeline += [
-                "sdist-lower-distribution",
-                "convert-sdist-to-std",
-                "cse",
-                "canonicalize",
-                "convert-sdist-utils-to-std",
-            ]
-        pipeline += [
-            # From complex control to the soup of basic blocks
-            "expand-strided-metadata",
-            "convert-linalg-to-loops",
-            "lower-affine",
-            "convert-vector-to-scf{full-unroll=true}",
-            "scf-forall-to-parallel",
-            "convert-scf-to-openmp",
-            "canonicalize",
-            "cse",
-            "sccp",
-            # "convert-scf-to-cf",
+        return cpu_frontend_lowering(
+            self._mlir_program.mlir_extensions, uplift_fma=False
+        ) + [
+            # convert-scf-to-cf is intentionally skipped: the C emitter keeps scf
             "canonicalize",
             "cse",
             "sccp",
@@ -299,7 +279,6 @@ class MlirProgramToStdDialectsPass:
             "cse",
             "sccp",
         ]
-        return pipeline
 
     def run(self) -> None:
         pm = PassManager(context=self._mlir_program.mlir_context)
