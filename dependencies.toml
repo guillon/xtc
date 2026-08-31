@@ -22,7 +22,7 @@ include = ["default", "test"]
 [groups.test]
 dependencies = [
     "coverage>=7.8.0",
-    "filecheck",
+    "filecheck==1.0.3",
     "lit",
     "mkdocs",
     "mkdocs-material",
