@@ -68,11 +68,12 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  O = obj['O']
 # CHECK-NEXT:  b, h, w, f, = O.op.axis
 # CHECK-NEXT:  r, s, c, = O.op.reduce_axis
+# CHECK-NEXT:  c, __u_c = sch[O].split(c, factor=3)
 # CHECK-NEXT:  w, w1 = sch[O].split(w, factor=4)
 # CHECK-NEXT:  f, f1 = sch[O].split(f, factor=16)
-# CHECK-NEXT:  sch[O].reorder(b, h, w, f, r, s, c, w1, f1)
+# CHECK-NEXT:  sch[O].reorder(b, h, w, f, r, s, c, __u_c, w1, f1)
 # CHECK-NEXT:  sch[O].unroll(w1)
-# CHECK-NEXT:  sch[O].unroll(c)
+# CHECK-NEXT:  sch[O].unroll(__u_c)
 # CHECK-NEXT:  sch[O].vectorize(f1)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
