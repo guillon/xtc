@@ -76,7 +76,7 @@ class ResultsDB(ABC):
 
     @classmethod
     def get_xtc_version(cls) -> str:
-        return "v" + importlib.metadata.version("xtc")
+        return "v" + importlib.metadata.version("xtc-tools")
 
     @classmethod
     def get_version(cls) -> list[Any]:

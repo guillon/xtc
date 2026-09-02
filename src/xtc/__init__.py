@@ -4,4 +4,4 @@
 #
 import importlib.metadata
 
-__version__ = importlib.metadata.version("xtc")
+__version__ = importlib.metadata.version("xtc-tools")

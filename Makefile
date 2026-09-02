@@ -16,6 +16,7 @@ help:
 	@echo "    make format-license # add licenses"
 	@echo "    make format-ruff   # format python files with ruff"
 	@echo "  make dependencies    # update pyproject.toml dependencies from dependencies.toml
+	@echo "  make wheel           # install build tools, build and check distributions"
 	@echo "  make agents          # create AGENTS.md"
 	@echo "  make claude          # create CLAUDE.md"
 	@echo
@@ -83,6 +84,14 @@ format-license:
 dependencies:
 	scripts/pyproject/update_dependencies.py
 
+wheel:
+	python -m ensurepip --upgrade
+	python -m pip install --upgrade build twine
+	rm -rf build dist src/*.egg-info
+	python -m build
+	python -m twine check dist/*
+	python scripts/pyproject/check_wheel.py
+
 agents:
 	scripts/llms/init_agents.py agents README.md "Links" "AI assistants" > AGENTS.md
 
@@ -92,5 +101,5 @@ claude:
 run-tutorial:
 	marimo run docs/tutorials/xtc_101.py
 
-.PHONY: help test check check-lit-all check-lit check-lit-c check-lit-nvpgu check-pytest check-type check-pyright check-mypy check-format check-format-ruff check-license check-banwords format format-ruff format-license agents claude check-tutorials run-tutorial check-dependencies dependencies
+.PHONY: help test check check-lit-all check-lit check-lit-c check-lit-nvpgu check-pytest check-type check-pyright check-mypy check-format check-format-ruff check-license check-banwords format format-ruff format-license agents claude check-tutorials run-tutorial check-dependencies dependencies wheel
 .SUFFIXES:

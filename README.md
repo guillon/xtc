@@ -107,6 +107,14 @@ dependencies.
 
 Always update dependencies there and run `make dependencies` to update `pyproject.toml` before commit.
 
+### Releases
+
+Package versions are derived from Git tags. Successful updates to `main` are
+published to TestPyPI as development versions, while tags of the form
+`xtc-vX.Y.Z` are published to PyPI. See
+[the release guide](docs/develop/releasing.md) for the release procedure and
+required trusted-publishing configuration.
+
 ## Architecture
 
 ### Core Abstractions (src/xtc/itf/)
