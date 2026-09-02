@@ -45,6 +45,8 @@ def get_library_path(libname: str) -> str:
             return str(candidate)
 
     ldconfig = shutil.which("ldconfig")
+    if ldconfig is None and Path("/sbin/ldconfig").is_file():
+        ldconfig = "/sbin/ldconfig"
     if ldconfig is not None:
         result = subprocess.run([ldconfig, "-p"], capture_output=True, text=True)
         for line in result.stdout.splitlines():
