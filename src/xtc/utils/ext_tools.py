@@ -3,15 +3,12 @@
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
 import ctypes.util
-import subprocess
-import re
-import platform
-
 import os
 import platform
-import ctypes.util
-import subprocess
 import re
+import shutil
+import subprocess
+from pathlib import Path
 
 
 def get_library_path(libname: str) -> str:
@@ -29,13 +26,37 @@ def get_library_path(libname: str) -> str:
     if platform.system() == "Darwin":
         return libfile
 
-    result = subprocess.run(["/sbin/ldconfig", "-p"], capture_output=True, text=True)
-    for line in result.stdout.splitlines():
-        if libfile in line:
-            match = re.search(r"=>\s+(\S+)", line)
-            if match:
-                return match.group(1)
-    assert False
+    libpath = Path(libfile)
+    if libpath.is_absolute() and libpath.is_file():
+        return str(libpath)
+
+    # Nix and other non-FHS environments expose libraries through environment
+    # search paths rather than the host's ldconfig cache.
+    search_paths: list[Path] = []
+    for variable in ("LD_LIBRARY_PATH", "LIBRARY_PATH"):
+        search_paths.extend(
+            Path(path)
+            for path in os.environ.get(variable, "").split(os.pathsep)
+            if path
+        )
+    for directory in search_paths:
+        candidate = directory / libfile
+        if candidate.is_file():
+            return str(candidate)
+
+    ldconfig = shutil.which("ldconfig")
+    if ldconfig is not None:
+        result = subprocess.run([ldconfig, "-p"], capture_output=True, text=True)
+        for line in result.stdout.splitlines():
+            if libfile in line:
+                match = re.search(r"=>\s+(\S+)", line)
+                if match:
+                    return match.group(1)
+
+    searched = os.pathsep.join(str(path) for path in search_paths)
+    raise RuntimeError(
+        f"could not resolve {libfile} for {libname}; searched: {searched}"
+    )
 
 
 def get_shlib_extension():
