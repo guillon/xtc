@@ -17,6 +17,7 @@ help:
 	@echo "    make format-ruff   # format python files with ruff"
 	@echo "  make dependencies    # update pyproject.toml dependencies from dependencies.toml
 	@echo "  make wheel           # install build tools, build and check distributions"
+	@echo "  make pages           # build the documentation site"
 	@echo "  make agents          # create AGENTS.md"
 	@echo "  make claude          # create CLAUDE.md"
 	@echo
@@ -92,6 +93,9 @@ wheel:
 	python -m twine check dist/*
 	python scripts/pyproject/check_wheel.py
 
+pages:
+	$(MAKE) -C docs/site site
+
 agents:
 	scripts/llms/init_agents.py agents README.md "Links" "AI assistants" > AGENTS.md
 
@@ -101,5 +105,5 @@ claude:
 run-tutorial:
 	marimo run docs/tutorials/xtc_101.py
 
-.PHONY: help test check check-lit-all check-lit check-lit-c check-lit-nvpgu check-pytest check-type check-pyright check-mypy check-format check-format-ruff check-license check-banwords format format-ruff format-license agents claude check-tutorials run-tutorial check-dependencies dependencies wheel
+.PHONY: help test check check-lit-all check-lit check-lit-c check-lit-nvpgu check-pytest check-type check-pyright check-mypy check-format check-format-ruff check-license check-banwords format format-ruff format-license agents claude check-tutorials run-tutorial check-dependencies dependencies wheel pages
 .SUFFIXES:

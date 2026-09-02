@@ -1,10 +1,7 @@
-name: XTC Deploy Pages
+name: XTC Pages
 
-# Runs on pushes targeting the pages branch and manual Actions tab
 on:
-  push:
-    branches: ["pages"]
-  workflow_dispatch:
+  workflow_call:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
@@ -20,15 +17,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Single deploy job since we're just deploying
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build-pages:
+    name: Build Pages preview
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
         with:
@@ -42,14 +38,32 @@ jobs:
         run: |
           pip install -e .[dev]
       - name: Build Pages
-        # for github pages only: uses: actions/configure-pages@v5
-        run: |
-          cd docs/site
-          mkdocs build --clean --strict --site-dir ../../public
-      - name: Upload artifact
+        run: make pages
+      - name: Upload Pages preview
+        uses: actions/upload-artifact@v5
+        with:
+          name: pages-preview
+          path: public/
+          if-no-files-found: error
+
+  deploy-pages:
+    name: Deploy Pages
+    if: startsWith(github.ref, 'refs/tags/xtc-v')
+    needs: build-pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download Pages preview
+        uses: actions/download-artifact@v6
+        with:
+          name: pages-preview
+          path: public/
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'public'
+          path: public/
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

@@ -170,6 +170,19 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  pages:
+    name: Build and deploy Pages
+    needs: [build, pr-build]
+    if: |
+      always() &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+      (needs.pr-build.result == 'success' || needs.pr-build.result == 'skipped')
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/reusable-pages.yml
+
   publish-testpypi:
     name: Publish development package to TestPyPI
     if: >
