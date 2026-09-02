@@ -1,6 +1,9 @@
 site_name: XTC
 site_url: https://xtc-tools.github.io/xtc/
 
+hooks:
+- hooks/version.py
+
 nav:
 - "Home": index.md
 - "Overview": overview.md
