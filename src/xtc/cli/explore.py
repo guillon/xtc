@@ -278,12 +278,6 @@ def main():
         help="use tensors instead of memref for the mlir backend",
     )
     parser.add_argument(
-        "--tir-schedule",
-        action=argparse.BooleanOptionalAction,
-        default=defaults.tir_schedule,
-        help="use TIR schedule instead of TE schedule for tvm backend",
-    )
-    parser.add_argument(
         "--batch", type=int, default=defaults.batch, help="batch size for optimizer"
     )
     parser.add_argument(

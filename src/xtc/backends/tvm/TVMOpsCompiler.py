@@ -3,12 +3,12 @@
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
 from typing_extensions import override
-from typing import Any, TypeAlias
+from typing import Any, TypeAlias, cast
 
 import tvm
 import tvm.te as te
+import tvm.s_tir
 
 from .TVMOps import (
     TVMBaseExpr,
@@ -20,24 +20,22 @@ __all__ = [
     "TVMExprCompiler",
     "TVMSchedulableExpr",
     "TVMSchedulableExpr",
-    "TVMSchedulableExprTE",
     "TVMSchedulableExprTIR",
     "TVMScheduledExpr",
-    "TVMScheduledExprTE",
     "TVMScheduledExprTIR",
 ]
 
 
 TETensor: TypeAlias = te.Tensor
-TIRSchedule: TypeAlias = tvm.tir.Schedule
-TIRFunc: TypeAlias = tvm.tir.PrimFunc
+TIRSchedule: TypeAlias = tvm.s_tir.Schedule
+TIRFunc: TypeAlias = tvm.tirx.PrimFunc
 TESchedule: TypeAlias = Any  # te.Schedule not available on tvm > 0.19
+TEParam: TypeAlias = te.Tensor | tvm.tirx.Var
 
 
 class TVMExprCompiler:
-    def __init__(self, expr: TVMBaseExpr, tir_schedule: bool = True):
+    def __init__(self, expr: TVMBaseExpr):
         self._expr = expr
-        self._tir_schedule = tir_schedule
 
     def generate(self) -> "TVMSchedulableExpr":
         if isinstance(self._expr, TVMGraph):
@@ -48,10 +46,9 @@ class TVMExprCompiler:
             assert isinstance(self._expr, TVMOperation)
             params = list(self._expr.operator.generate_op())
             vars = params
-        if self._tir_schedule:
-            prim_func = te.create_prim_func(params)
-            return TVMSchedulableExprTIR(self._expr, prim_func)
-        return TVMSchedulableExprTE(self._expr, params, vars)
+        args = cast(list[TEParam], params)
+        prim_func = te.create_prim_func(args)
+        return TVMSchedulableExprTIR(self._expr, prim_func)
 
 
 class TVMSchedulableExpr(ABC):
@@ -61,34 +58,6 @@ class TVMSchedulableExpr(ABC):
     @property
     @abstractmethod
     def expr(self) -> TVMBaseExpr: ...
-
-
-class TVMSchedulableExprTE(TVMSchedulableExpr):
-    def __init__(
-        self,
-        expr: TVMBaseExpr,
-        params: Sequence[TETensor],
-        tensors: Sequence[TETensor] | None = None,
-    ):
-        self._expr = expr
-        self._params = list(params)
-        self._tensors = list(params) if tensors is None else list(tensors)
-
-    @property
-    @override
-    def expr(self) -> TVMBaseExpr:
-        return self._expr
-
-    @override
-    def schedule(self, schedule: Any = None) -> "TVMScheduledExprTE":
-        sch = te.create_schedule(self._params[-1].op)  # type: ignore
-        if schedule is not None:
-            schedule_map = schedule.schedule_impl
-            tensors_map = {t.name: t for t in self._tensors}
-            for sched in schedule_map.values():
-                if sched:
-                    exec(sched, {"sch": sch, "obj": tensors_map}, {})
-        return TVMScheduledExprTE(self, sch)
 
 
 class TVMSchedulableExprTIR(TVMSchedulableExpr):
@@ -106,10 +75,9 @@ class TVMSchedulableExprTIR(TVMSchedulableExpr):
         func_name = self._expr.name
         func = self._func.with_attr("global_symbol", self._expr.name)
         mod = tvm.IRModule({func_name: func})
-        sch = tvm.tir.Schedule(mod)
+        sch = tvm.s_tir.Schedule(mod)
         if schedule is None:
             return TVMScheduledExprTIR(self, sch)
-        # TODO: schedule TIR
         schedule_map = schedule.schedule_impl
         sch.work_on(func_name)
         for sched in schedule_map.values():
@@ -125,23 +93,6 @@ class TVMScheduledExpr(ABC):
 
     @abstractmethod
     def dumps(self) -> str: ...
-
-
-class TVMScheduledExprTE(TVMScheduledExpr):
-    def __init__(self, schedulable: TVMSchedulableExprTE, schedule: TESchedule):
-        self._schedulable = schedulable
-        self._schedule = schedule
-
-    @property
-    @override
-    def schedulable(self) -> TVMSchedulableExprTE:
-        return self._schedulable
-
-    @override
-    def dumps(self) -> str:
-        return str(
-            tvm.lower(self._schedule, self._schedulable._params, simple_mode=True)  # type: ignore
-        )
 
 
 class TVMScheduledExprTIR(TVMScheduledExpr):

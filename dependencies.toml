@@ -51,7 +51,7 @@ dependencies = [
 ]
 
 [groups.tvm]
-include = ["llvm"]
 dependencies = [
-    'xtc-tvm-python-bindings==0.19.0.12',
+    'apache-tvm==0.26.0',
+    'apache-tvm-ffi==0.1.13.post3',
 ]

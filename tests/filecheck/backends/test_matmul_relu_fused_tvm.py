@@ -2,7 +2,7 @@
 # REQUIRES: module_tvm
 
 import xtc.graphs.xtc.op as O
-from xtc.backends.tvm import TVMBackend as Backend
+from xtc.backends.tvm import Backend
 
 I, J, K, dtype = 4, 32, 512, "float32"
 a = O.tensor((I, K), dtype, name="A")
@@ -17,17 +17,16 @@ print(graph)
 
 impl = Backend(graph)
 
-sch = impl.get_scheduler(nodes=["matmul"])
+sch = impl.get_scheduler(default_node="matmul")
 sch.tile("i", {"i1": 2})
 sch.tile("j", {"j1": 16})
-sch.interchange(["k", "i", "j", "i1", "j1"])
-sch.vectorize(["j1"])
-sch.unroll({"i1": 2})
+sch.interchange(["i", "j", "i1", "j1", "k"])
+sch.fuse_consumer_at("j1")
 sched = sch.schedule()
 
 comp = impl.get_compiler(
     shared_lib=True,
-    dump_file="matmul_relu_subset_tvm",
+    dump_file="matmul_relu_fused_tvm",
     print_source_ir=True,
     print_transformed_ir=True,
 )
@@ -35,6 +34,7 @@ module = comp.compile(sched)
 executor = module.get_executor(validate=True)
 res = executor.execute()
 print(f"CODE: {res}")
+
 # CHECK:       graph:
 # CHECK-NEXT:    name: matmul_relu
 # CHECK-NEXT:    inputs:
@@ -87,11 +87,11 @@ print(f"CODE: {res}")
 # CHECK-NEXT:                  T_reshape[v_ax0, v_ax1] = relu[(v_ax0 * 32 + v_ax1) % 128]
 # CHECK-NEXT:  O = sch.get_sblock("matmul")
 # CHECK-NEXT:  i, j, k, = sch.get_loops(O)
+# CHECK-NEXT:  O_F0 = sch.get_consumers(O)[0]
 # CHECK-NEXT:  i, i1, = sch.split(i, factors=[None, 2])
 # CHECK-NEXT:  j, j1, = sch.split(j, factors=[None, 16])
-# CHECK-NEXT:  sch.reorder(k, i, j, i1, j1)
-# CHECK-NEXT:  sch.unroll(i1)
-# CHECK-NEXT:  sch.vectorize(j1)
+# CHECK-NEXT:  sch.reorder(i, j, i1, j1, k)
+# CHECK-NEXT:  sch.reverse_compute_at(O_F0, j1)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T
@@ -106,21 +106,19 @@ print(f"CODE: {res}")
 # CHECK-NEXT:          matmul = T.sblock_alloc_buffer((4, 32))
 # CHECK-NEXT:          T_reshape_1 = T.sblock_alloc_buffer((128,))
 # CHECK-NEXT:          relu = T.sblock_alloc_buffer((128,))
-# CHECK-NEXT:          for k, i_0, j_0 in T.grid(512, 2, 2):
-# CHECK-NEXT:              for i_1 in T.unroll(2):
-# CHECK-NEXT:                  for j_1 in T.vectorized(16):
-# CHECK-NEXT:                      with T.sblock("matmul"):
-# CHECK-NEXT:                          v_i = T.axis.spatial(4, i_0 * 2 + i_1)
-# CHECK-NEXT:                          v_j = T.axis.spatial(32, j_0 * 16 + j_1)
-# CHECK-NEXT:                          v_k = T.axis.reduce(512, k)
-# CHECK-NEXT:                          T.reads(_0[v_i, v_k], _1[v_k, v_j])
-# CHECK-NEXT:                          T.writes(matmul[v_i, v_j])
-# CHECK-NEXT:                          with T.init():
-# CHECK-NEXT:                              matmul[v_i, v_j] = T.float32(0.0)
-# CHECK-NEXT:                          matmul[v_i, v_j] = matmul[v_i, v_j] + _0[v_i, v_k] * _1[v_k, v_j]
-# CHECK-NEXT:          for ax0 in range(128):
+# CHECK-NEXT:          for i_0, j_0, i_1, j_1 in T.grid(2, 2, 2, 16):
+# CHECK-NEXT:              for k in range(512):
+# CHECK-NEXT:                  with T.sblock("matmul"):
+# CHECK-NEXT:                      v_i = T.axis.spatial(4, i_0 * 2 + i_1)
+# CHECK-NEXT:                      v_j = T.axis.spatial(32, j_0 * 16 + j_1)
+# CHECK-NEXT:                      v_k = T.axis.reduce(512, k)
+# CHECK-NEXT:                      T.reads(_0[v_i, v_k], _1[v_k, v_j])
+# CHECK-NEXT:                      T.writes(matmul[v_i, v_j])
+# CHECK-NEXT:                      with T.init():
+# CHECK-NEXT:                          matmul[v_i, v_j] = T.float32(0.0)
+# CHECK-NEXT:                      matmul[v_i, v_j] = matmul[v_i, v_j] + _0[v_i, v_k] * _1[v_k, v_j]
 # CHECK-NEXT:              with T.sblock("T_reshape"):
-# CHECK-NEXT:                  v_ax0 = T.axis.spatial(128, ax0)
+# CHECK-NEXT:                  v_ax0 = T.axis.spatial(128, i_0 * 64 + i_1 * 32 + j_0 * 16 + j_1)
 # CHECK-NEXT:                  T.reads(matmul[v_ax0 % 128 // 32, v_ax0 % 32])
 # CHECK-NEXT:                  T.writes(T_reshape_1[v_ax0])
 # CHECK-NEXT:                  T_reshape_1[v_ax0] = matmul[v_ax0 % 128 // 32, v_ax0 % 32]

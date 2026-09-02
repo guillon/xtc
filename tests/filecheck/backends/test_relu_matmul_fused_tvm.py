@@ -32,7 +32,7 @@ sched = sch.schedule()
 
 comp = impl.get_compiler(
     shared_lib=True,
-    dump_file="relu_matmul_tvm_fused",
+    dump_file="relu_matmul_fused_tvm",
     print_source_ir=True,
     print_transformed_ir=True,
 )
@@ -54,105 +54,123 @@ print(f"CODE: {res}")
 # CHECK-NEXT:    - %3: matmul(%2, %1) {name = 'C'} : [64x64xfloat32, 64x64xfloat32] -> [64x64xfloat32]
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
-# CHECK-NEXT:  # from tvm.script import tir as T
+# CHECK-NEXT:  # from tvm.script import tirx as T
+# CHECK-NEXT:  # from tvm.tirx.layout import Axis
 # CHECK-NEXT:  
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
-# CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(_0: T.Buffer((64, 64), "float32"), _1: T.Buffer((64, 64), "float32"), C: T.Buffer((64, 64), "float32")):
-# CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          T_reshape = T.allocate([4096], "float32", "global")
-# CHECK-NEXT:          T_reshape_1 = T.Buffer((4096,), data=T_reshape)
+# CHECK-NEXT:      @T.prim_func(s_tir=True)
+# CHECK-NEXT:      def matmul(_0: T.Buffer((64, 64), "float32"), _1: T.Buffer((64, 64), "float32"), C: T.Buffer((64, 64), "float32")):
+# CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
+# CHECK-NEXT:          # with T.sblock("root"):
+# CHECK-NEXT:          T_reshape = T.sblock_alloc_buffer((4096,))
+# CHECK-NEXT:          relu = T.sblock_alloc_buffer((4096,))
+# CHECK-NEXT:          T_reshape_1 = T.sblock_alloc_buffer((64, 64))
 # CHECK-NEXT:          for ax0 in range(4096):
-# CHECK-NEXT:              _0_1 = T.Buffer((4096,), data=_0.data)
-# CHECK-NEXT:              T_reshape_1[ax0] = _0_1[ax0]
+# CHECK-NEXT:              with T.sblock("T_reshape"):
+# CHECK-NEXT:                  v_ax0 = T.axis.spatial(4096, ax0)
+# CHECK-NEXT:                  T.reads(_0[v_ax0 % 4096 // 64, v_ax0 % 64])
+# CHECK-NEXT:                  T.writes(T_reshape[v_ax0])
+# CHECK-NEXT:                  T_reshape[v_ax0] = _0[v_ax0 % 4096 // 64, v_ax0 % 64]
 # CHECK-NEXT:          for i in range(4096):
-# CHECK-NEXT:              T_reshape_2 = T.Buffer((4096,), data=T_reshape)
-# CHECK-NEXT:              T_reshape_2[i] = T.max(T.float32(0.0), T_reshape_1[i])
-# CHECK-NEXT:          for i, j in T.grid(64, 64):
-# CHECK-NEXT:              C_1 = T.Buffer((4096,), data=C.data)
-# CHECK-NEXT:              C_1[i * 64 + j] = T.float32(0.0)
-# CHECK-NEXT:              for k in range(64):
-# CHECK-NEXT:                  cse_var_2: T.int32 = i * 64
-# CHECK-NEXT:                  cse_var_1: T.int32 = cse_var_2 + j
-# CHECK-NEXT:                  T_reshape_2 = T.Buffer((4096,), data=T_reshape)
-# CHECK-NEXT:                  _1_1 = T.Buffer((4096,), data=_1.data)
-# CHECK-NEXT:                  C_1[cse_var_1] = C_1[cse_var_1] + T_reshape_2[cse_var_2 + k] * _1_1[k * 64 + j]
-# CHECK-NEXT:  INPS = list(obj.values())[:-1]
-# CHECK-NEXT:  O = obj['C']
-# CHECK-NEXT:  O_W0 = sch.cache_write(O, "global")
-# CHECK-NEXT:  I_R1 = sch.cache_read(INPS[1], "global", [O_W0])
-# CHECK-NEXT:  I_F0 = O_W0.op.input_tensors[0]
-# CHECK-NEXT:  i, j, = O.op.axis
-# CHECK-NEXT:  k, = O.op.reduce_axis
-# CHECK-NEXT:  i, i_ = sch[O].split(i, factor=8)
-# CHECK-NEXT:  j, j_ = sch[O].split(j, factor=32)
-# CHECK-NEXT:  sch[O].reorder(i, j, i_, j_)
-# CHECK-NEXT:  j = sch[O].fuse(i, j)
-# CHECK-NEXT:  sch[O].parallel(j)
-# CHECK-NEXT:  sch[O_W0].compute_at(sch[O], j)
-# CHECK-NEXT:  i, j, = O_W0.op.axis
-# CHECK-NEXT:  k, = O_W0.op.reduce_axis
-# CHECK-NEXT:  i1 = i
-# CHECK-NEXT:  j1 = j
-# CHECK-NEXT:  k, k1 = sch[O_W0].split(k, factor=16)
-# CHECK-NEXT:  i1, i2 = sch[O_W0].split(i1, factor=4)
-# CHECK-NEXT:  j1, j2 = sch[O_W0].split(j1, factor=16)
-# CHECK-NEXT:  sch[O_W0].reorder(k, i1, j1, k1, i2, j2)
-# CHECK-NEXT:  sch[I_R1].compute_at(sch[O_W0], k)
-# CHECK-NEXT:  sch[I_R1].storage_align(I_R1.op.axis[-2], factor=1024, offset=16)
-# CHECK-NEXT:  sch[I_F0].compute_at(sch[O_W0], k)
-# CHECK-NEXT:  sch[O_W0].unroll(i2)
-# CHECK-NEXT:  sch[O_W0].vectorize(j2)
+# CHECK-NEXT:              with T.sblock("relu"):
+# CHECK-NEXT:                  v_i = T.axis.spatial(4096, i)
+# CHECK-NEXT:                  T.reads(T_reshape[v_i])
+# CHECK-NEXT:                  T.writes(relu[v_i])
+# CHECK-NEXT:                  relu[v_i] = T.max(T.float32(0.0), T_reshape[v_i])
+# CHECK-NEXT:          for ax0, ax1 in T.grid(64, 64):
+# CHECK-NEXT:              with T.sblock("T_reshape_1"):
+# CHECK-NEXT:                  v_ax0, v_ax1 = T.axis.remap("SS", [ax0, ax1])
+# CHECK-NEXT:                  T.reads(relu[(v_ax0 * 64 + v_ax1) % 4096])
+# CHECK-NEXT:                  T.writes(T_reshape_1[v_ax0, v_ax1])
+# CHECK-NEXT:                  T_reshape_1[v_ax0, v_ax1] = relu[(v_ax0 * 64 + v_ax1) % 4096]
+# CHECK-NEXT:          for i, j, k in T.grid(64, 64, 64):
+# CHECK-NEXT:              with T.sblock("C"):
+# CHECK-NEXT:                  v_i, v_j, v_k = T.axis.remap("SSR", [i, j, k])
+# CHECK-NEXT:                  T.reads(T_reshape_1[v_i, v_k], _1[v_k, v_j])
+# CHECK-NEXT:                  T.writes(C[v_i, v_j])
+# CHECK-NEXT:                  with T.init():
+# CHECK-NEXT:                      C[v_i, v_j] = T.float32(0.0)
+# CHECK-NEXT:                  C[v_i, v_j] = C[v_i, v_j] + T_reshape_1[v_i, v_k] * _1[v_k, v_j]
+# CHECK-NEXT:  O = sch.get_sblock("C")
+# CHECK-NEXT:  i, j, k, = sch.get_loops(O)
+# CHECK-NEXT:  I_R1 = sch.cache_read(O, 1, "global")
+# CHECK-NEXT:  O_W0 = sch.cache_write(O, 0, "global")
+# CHECK-NEXT:  I_F0 = sch.get_producers(O)[0]
+# CHECK-NEXT:  i, i1, i2, = sch.split(i, factors=[None, 2, 4])
+# CHECK-NEXT:  j, j1, j2, = sch.split(j, factors=[None, 2, 16])
+# CHECK-NEXT:  k, k1, = sch.split(k, factors=[None, 16])
+# CHECK-NEXT:  sch.reorder(i, j, k, i1, j1, k1, i2, j2)
+# CHECK-NEXT:  sch.reverse_compute_at(O_W0, j)
+# CHECK-NEXT:  sch.compute_at(I_R1, k)
+# CHECK-NEXT:  sch.storage_align(I_R1, 0,  axis=-2, factor=1024, offset=16)
+# CHECK-NEXT:  sch.compute_at(I_F0, k)
+# CHECK-NEXT:  sch.unroll(i2)
+# CHECK-NEXT:  sch.vectorize(j2)
+# CHECK-NEXT:  j = sch.fuse(i, j)
+# CHECK-NEXT:  sch.parallel(j)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
-# CHECK-NEXT:  # from tvm.script import tir as T
+# CHECK-NEXT:  # from tvm.script import tirx as T
+# CHECK-NEXT:  # from tvm.tirx.layout import Axis
 # CHECK-NEXT:  
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
-# CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(_0: T.Buffer((64, 64), "float32"), _1: T.Buffer((64, 64), "float32"), C: T.Buffer((64, 64), "float32")):
-# CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          T_reshape = T.allocate([4096], "float32", "global")
-# CHECK-NEXT:          T_reshape_1 = T.Buffer((4096,), data=T_reshape)
+# CHECK-NEXT:      @T.prim_func(s_tir=True)
+# CHECK-NEXT:      def matmul(_0: T.Buffer((64, 64), "float32"), _1: T.Buffer((64, 64), "float32"), C: T.Buffer((64, 64), "float32")):
+# CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
+# CHECK-NEXT:          # with T.sblock("root"):
+# CHECK-NEXT:          T_reshape = T.sblock_alloc_buffer((4096,))
+# CHECK-NEXT:          relu = T.sblock_alloc_buffer((4096,))
+# CHECK-NEXT:          T_reshape_1 = T.sblock_alloc_buffer((64, 64))
+# CHECK-NEXT:          _1_global = T.sblock_alloc_buffer((64, 64))
+# CHECK-NEXT:          C_global = T.sblock_alloc_buffer((64, 64))
 # CHECK-NEXT:          for ax0 in range(4096):
-# CHECK-NEXT:              _0_1 = T.Buffer((4096,), data=_0.data)
-# CHECK-NEXT:              T_reshape_1[ax0] = _0_1[ax0]
-# CHECK-NEXT:          T_reshape_2 = T.Buffer((4096,), data=T_reshape)
+# CHECK-NEXT:              with T.sblock("T_reshape"):
+# CHECK-NEXT:                  v_ax0 = T.axis.spatial(4096, ax0)
+# CHECK-NEXT:                  T.reads(_0[v_ax0 % 4096 // 64, v_ax0 % 64])
+# CHECK-NEXT:                  T.writes(T_reshape[v_ax0])
+# CHECK-NEXT:                  T_reshape[v_ax0] = _0[v_ax0 % 4096 // 64, v_ax0 % 64]
 # CHECK-NEXT:          for i in range(4096):
-# CHECK-NEXT:              T_reshape_2[i] = T.max(T.float32(0.0), T_reshape_1[i])
-# CHECK-NEXT:          for i_outer_j_outer_fused in T.parallel(16):
-# CHECK-NEXT:              C_global = T.allocate([256], "float32", "global")
-# CHECK-NEXT:              T_reshape_3 = T.allocate([128], "float32", "global")
-# CHECK-NEXT:              _1_global = T.allocate([16640], "float32", "global")
-# CHECK-NEXT:              C_global_1 = T.Buffer((256,), data=C_global)
-# CHECK-NEXT:              for i_c_outer_init, j_c_outer_init in T.grid(2, 2):
-# CHECK-NEXT:                  cse_var_1: T.int32 = i_c_outer_init * 128 + j_c_outer_init * 16
-# CHECK-NEXT:                  C_global_1[cse_var_1:cse_var_1 + 16] = T.Broadcast(T.float32(0.0), 16)
-# CHECK-NEXT:                  C_global_1[cse_var_1 + 32:cse_var_1 + 32 + 16] = T.Broadcast(T.float32(0.0), 16)
-# CHECK-NEXT:                  C_global_1[cse_var_1 + 64:cse_var_1 + 64 + 16] = T.Broadcast(T.float32(0.0), 16)
-# CHECK-NEXT:                  C_global_1[cse_var_1 + 96:cse_var_1 + 96 + 16] = T.Broadcast(T.float32(0.0), 16)
-# CHECK-NEXT:              for k_outer in range(4):
-# CHECK-NEXT:                  T_reshape_4 = T.Buffer((128,), data=T_reshape_3)
-# CHECK-NEXT:                  for ax0, ax1 in T.grid(8, 16):
-# CHECK-NEXT:                      T_reshape_4[ax0 * 16 + ax1] = T_reshape_2[i_outer_j_outer_fused // 2 * 512 + ax0 * 64 + k_outer * 16 + ax1]
-# CHECK-NEXT:                  _1_global_1 = T.Buffer((16640,), data=_1_global)
+# CHECK-NEXT:              with T.sblock("relu"):
+# CHECK-NEXT:                  v_i = T.axis.spatial(4096, i)
+# CHECK-NEXT:                  T.reads(T_reshape[v_i])
+# CHECK-NEXT:                  T.writes(relu[v_i])
+# CHECK-NEXT:                  relu[v_i] = T.max(T.float32(0.0), T_reshape[v_i])
+# CHECK-NEXT:          for i_0_j_0_fused in T.parallel(16):
+# CHECK-NEXT:              for k_0 in range(4):
 # CHECK-NEXT:                  for ax0, ax1 in T.grid(16, 32):
-# CHECK-NEXT:                      _1_1 = T.Buffer((4096,), data=_1.data)
-# CHECK-NEXT:                      _1_global_1[ax0 * 1040 + ax1] = _1_1[k_outer * 1024 + ax0 * 64 + i_outer_j_outer_fused % 2 * 32 + ax1]
-# CHECK-NEXT:                  for i_c_outer, j_c_outer, k_inner in T.grid(2, 2, 16):
-# CHECK-NEXT:                      cse_var_8: T.int32 = j_c_outer * 16
-# CHECK-NEXT:                      cse_var_7: T.int32 = i_c_outer * 64 + k_inner
-# CHECK-NEXT:                      cse_var_6: T.int32 = k_inner * 1040 + cse_var_8
-# CHECK-NEXT:                      cse_var_5: T.int32 = i_c_outer * 128 + cse_var_8
-# CHECK-NEXT:                      cse_var_4: T.int32 = cse_var_5 + 96
-# CHECK-NEXT:                      cse_var_3: T.int32 = cse_var_5 + 64
-# CHECK-NEXT:                      cse_var_2: T.int32 = cse_var_5 + 32
-# CHECK-NEXT:                      C_global_1[cse_var_5:cse_var_5 + 16] = C_global_1[cse_var_5:cse_var_5 + 16] + T.Broadcast(T_reshape_4[cse_var_7], 16) * _1_global_1[cse_var_6:cse_var_6 + 16]
-# CHECK-NEXT:                      C_global_1[cse_var_2:cse_var_2 + 16] = C_global_1[cse_var_2:cse_var_2 + 16] + T.Broadcast(T_reshape_4[cse_var_7 + 16], 16) * _1_global_1[cse_var_6:cse_var_6 + 16]
-# CHECK-NEXT:                      C_global_1[cse_var_3:cse_var_3 + 16] = C_global_1[cse_var_3:cse_var_3 + 16] + T.Broadcast(T_reshape_4[cse_var_7 + 32], 16) * _1_global_1[cse_var_6:cse_var_6 + 16]
-# CHECK-NEXT:                      C_global_1[cse_var_4:cse_var_4 + 16] = C_global_1[cse_var_4:cse_var_4 + 16] + T.Broadcast(T_reshape_4[cse_var_7 + 48], 16) * _1_global_1[cse_var_6:cse_var_6 + 16]
-# CHECK-NEXT:              for i_inner, j_inner in T.grid(8, 32):
-# CHECK-NEXT:                  C_1 = T.Buffer((4096,), data=C.data)
-# CHECK-NEXT:                  C_1[i_outer_j_outer_fused // 2 * 512 + i_inner * 64 + i_outer_j_outer_fused % 2 * 32 + j_inner] = C_global_1[i_inner * 32 + j_inner]
+# CHECK-NEXT:                      with T.sblock("_1_global"):
+# CHECK-NEXT:                          v0 = T.axis.spatial(64, k_0 * 16 + ax0)
+# CHECK-NEXT:                          v1 = T.axis.spatial(64, i_0_j_0_fused % 2 * 32 + ax1)
+# CHECK-NEXT:                          T.reads(_1[v0, v1])
+# CHECK-NEXT:                          T.writes(_1_global[v0, v1])
+# CHECK-NEXT:                          T.sblock_attr({"buffer_dim_align": [[0, 0, 1024, 16]]})
+# CHECK-NEXT:                          _1_global[v0, v1] = _1[v0, v1]
+# CHECK-NEXT:                  for ax0, ax1 in T.grid(8, 16):
+# CHECK-NEXT:                      with T.sblock("T_reshape_1"):
+# CHECK-NEXT:                          v_ax0 = T.axis.spatial(64, i_0_j_0_fused // 2 * 8 + ax0)
+# CHECK-NEXT:                          v_ax1 = T.axis.spatial(64, k_0 * 16 + ax1)
+# CHECK-NEXT:                          T.reads(relu[(v_ax0 * 64 + v_ax1) % 4096])
+# CHECK-NEXT:                          T.writes(T_reshape_1[v_ax0, v_ax1])
+# CHECK-NEXT:                          T_reshape_1[v_ax0, v_ax1] = relu[(v_ax0 * 64 + v_ax1) % 4096]
+# CHECK-NEXT:                  for i_1, j_1, k_1 in T.grid(2, 2, 16):
+# CHECK-NEXT:                      for i_2 in T.unroll(4):
+# CHECK-NEXT:                          for j_2 in T.vectorized(16):
+# CHECK-NEXT:                              with T.sblock("C"):
+# CHECK-NEXT:                                  v_i = T.axis.spatial(64, i_0_j_0_fused // 2 * 8 + i_1 * 4 + i_2)
+# CHECK-NEXT:                                  v_j = T.axis.spatial(64, i_0_j_0_fused % 2 * 32 + j_1 * 16 + j_2)
+# CHECK-NEXT:                                  v_k = T.axis.reduce(64, k_0 * 16 + k_1)
+# CHECK-NEXT:                                  T.reads(T_reshape_1[v_i, v_k], _1_global[v_k, v_j])
+# CHECK-NEXT:                                  T.writes(C_global[v_i, v_j])
+# CHECK-NEXT:                                  with T.init():
+# CHECK-NEXT:                                      C_global[v_i, v_j] = T.float32(0.0)
+# CHECK-NEXT:                                  C_global[v_i, v_j] = C_global[v_i, v_j] + T_reshape_1[v_i, v_k] * _1_global[v_k, v_j]
+# CHECK-NEXT:              for ax0, ax1 in T.grid(8, 32):
+# CHECK-NEXT:                  with T.sblock("C_global"):
+# CHECK-NEXT:                      v0 = T.axis.spatial(64, i_0_j_0_fused // 2 * 8 + ax0)
+# CHECK-NEXT:                      v1 = T.axis.spatial(64, i_0_j_0_fused % 2 * 32 + ax1)
+# CHECK-NEXT:                      T.reads(C_global[v0, v1])
+# CHECK-NEXT:                      T.writes(C[v0, v1])
+# CHECK-NEXT:                      C[v0, v1] = C_global[v0, v1]
 # CHECK-NEXT:  CODE: 0

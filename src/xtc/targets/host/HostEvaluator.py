@@ -105,7 +105,7 @@ class HostExecutor(itf.exec.Executor):
             module=module,
             repeat=1,
             min_repeat_ms=0,
-            number=1,
+            number=0,
             **kwargs,
         )
 

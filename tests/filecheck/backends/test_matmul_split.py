@@ -14,11 +14,6 @@ if len(sys.argv) > 1:
     if len(sys.argv) > 2 and sys.argv[2] == "--descript":
         descript = True
 
-if backend == "tvm":
-    backend_kwargs = {"tir_schedule": True}
-else:
-    backend_kwargs = {}
-
 backend = import_module(f"xtc.backends.{backend}")
 
 I, J, K, dtype = 64, 256, 256, "float32"
@@ -29,7 +24,7 @@ with O.graph(name="matmul") as gb:
     O.matmul(a, b, name="C")
 graph = gb.graph
 
-impl = backend.Backend(graph, **backend_kwargs)
+impl = backend.Backend(graph)
 sch = impl.get_scheduler()
 
 if descript:

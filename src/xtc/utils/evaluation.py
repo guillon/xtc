@@ -11,7 +11,7 @@ from xtc.runtimes.types.ndarray import NDArray
 from xtc.graphs.xtc.graph import XTCGraph
 from xtc.graphs.xtc.expr import XTCTensorExpr
 from xtc.graphs.xtc.data import XTCTensor
-from xtc.utils.cfunc import CFunc, CArgValue, CArgCode
+from xtc.utils.cfunc import CFunc
 from xtc.itf.runtime.common import CommonRuntimeInterface
 from xtc.runtimes.host.HostRuntime import HostRuntime
 
@@ -156,19 +156,13 @@ def evaluate_performance(
 ) -> tuple[list[float], int, str]:
     # TODO migrate host runtime to CommonRuntimeInterface
     cfunc = CFunc(func)
-    args_tuples = cfunc.args_tuples([*parameters[0], *parameters[1]])
+    args_array = cfunc.get_ctypes_args([*parameters[0], *parameters[1]])
     values_num = 1
     if len(pmu_counters) > 0:
         values_num = len(pmu_counters)
         # FIXME check if the PMU counters are supported by the target
     results_array = (ctypes.c_double * (repeat * values_num))()
-    if cfunc.is_packed:
-        args_array_packed = (CArgValue * len(args_tuples))(
-            *[arg[0] for arg in args_tuples]
-        )
-        args_codes_packed = (CArgCode * len(args_tuples))(
-            *[arg[1] for arg in args_tuples]
-        )
+    if cfunc.abi == "tvm_ffi":
         runtime.evaluate_packed_perf(
             results_array,
             pmu_counters,
@@ -176,15 +170,12 @@ def evaluate_performance(
             number,
             min_repeat_ms,
             cfunc,
-            args_array_packed,
-            args_codes_packed,
-            len(args_tuples),
+            args_array,
+            len(args_array),
         )
         eval_results = [float(x) for x in results_array]
     else:
-        args_array = (ctypes.c_voidp * len(args_tuples))(
-            *[arg[0] for arg in args_tuples]
-        )
+        assert cfunc.abi == "bare"
         eval_results = runtime.evaluate_perf(
             pmu_counters,
             repeat,

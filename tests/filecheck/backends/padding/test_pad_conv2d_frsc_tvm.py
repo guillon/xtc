@@ -45,60 +45,85 @@ print(f"CODE: {res}")
 # CHECK-NEXT:    - %4: conv2d(%2, %3, stride=(2, 2)) {name = 'conv'} : [1x12x12x3xfloat32, 5x5x3x16xfloat32] -> [1x4x4x16xfloat32]
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
-# CHECK-NEXT:  # from tvm.script import tir as T
+# CHECK-NEXT:  # from tvm.script import tirx as T
+# CHECK-NEXT:  # from tvm.tirx.layout import Axis
 # CHECK-NEXT:  
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
-# CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(_0: T.Buffer((1, 8, 8, 3), "float32"), _1: T.Buffer((16, 5, 5, 3), "float32"), conv: T.Buffer((1, 4, 4, 16), "float32")):
-# CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          pad = T.allocate([363], "float32", "global")
-# CHECK-NEXT:          _3 = T.allocate([1200], "float32", "global")
-# CHECK-NEXT:          pad_1 = T.Buffer((363,), data=pad)
-# CHECK-NEXT:          for i1, i2, i3 in T.grid(11, 11, 3):
-# CHECK-NEXT:              cse_var_1: T.int32 = i2 * 3
-# CHECK-NEXT:              _0_1 = T.Buffer((192,), data=_0.data)
-# CHECK-NEXT:              pad_1[i1 * 33 + cse_var_1 + i3] = T.if_then_else(2 <= i1 and i1 < 10 and 2 <= i2 and i2 < 10, _0_1[i1 * 24 + cse_var_1 + i3 - 54], T.float32(0.0))
+# CHECK-NEXT:      @T.prim_func(s_tir=True)
+# CHECK-NEXT:      def pad_conv2d_nhwc_mini(_0: T.Buffer((1, 8, 8, 3), "float32"), _1: T.Buffer((16, 5, 5, 3), "float32"), conv: T.Buffer((1, 4, 4, 16), "float32")):
+# CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
+# CHECK-NEXT:          # with T.sblock("root"):
+# CHECK-NEXT:          pad = T.sblock_alloc_buffer((1, 12, 12, 3))
+# CHECK-NEXT:          _3 = T.sblock_alloc_buffer((1200,))
+# CHECK-NEXT:          T_reshape = T.sblock_alloc_buffer((5, 5, 3, 16))
+# CHECK-NEXT:          for i0, i1, i2, i3 in T.grid(1, 12, 12, 3):
+# CHECK-NEXT:              with T.sblock("pad"):
+# CHECK-NEXT:                  v_i0, v_i1, v_i2, v_i3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
+# CHECK-NEXT:                  T.reads(_0[v_i0, v_i1 - 2, v_i2 - 2, v_i3])
+# CHECK-NEXT:                  T.writes(pad[v_i0, v_i1, v_i2, v_i3])
+# CHECK-NEXT:                  pad[v_i0, v_i1, v_i2, v_i3] = T.if_then_else(2 <= v_i1 and v_i1 < 10 and 2 <= v_i2 and v_i2 < 10, _0[v_i0, v_i1 - 2, v_i2 - 2, v_i3], T.float32(0.0))
 # CHECK-NEXT:          for i0 in range(1200):
-# CHECK-NEXT:              _3_1 = T.Buffer((1200,), data=_3)
-# CHECK-NEXT:              _1_1 = T.Buffer((1200,), data=_1.data)
-# CHECK-NEXT:              _3_1[i0] = _1_1[i0 % 16 * 75 + i0 // 16]
-# CHECK-NEXT:          for h, w, f in T.grid(4, 4, 16):
-# CHECK-NEXT:              conv_1 = T.Buffer((256,), data=conv.data)
-# CHECK-NEXT:              conv_1[h * 64 + w * 16 + f] = T.float32(0.0)
-# CHECK-NEXT:              for r, s, c in T.grid(5, 5, 3):
-# CHECK-NEXT:                  cse_var_2: T.int32 = h * 64 + w * 16 + f
-# CHECK-NEXT:                  _3_1 = T.Buffer((1200,), data=_3)
-# CHECK-NEXT:                  conv_1[cse_var_2] = conv_1[cse_var_2] + pad_1[h * 66 + r * 33 + w * 6 + s * 3 + c] * _3_1[r * 240 + s * 48 + c * 16 + f]
-# CHECK-NEXT:  O = obj['conv']
-# CHECK-NEXT:  b, h, w, f, = O.op.axis
-# CHECK-NEXT:  r, s, c, = O.op.reduce_axis
-# CHECK-NEXT:  sch[O].reorder(b, h, w, f, r, s, c)
+# CHECK-NEXT:              with T.sblock("%3"):
+# CHECK-NEXT:                  v_i0 = T.axis.spatial(1200, i0)
+# CHECK-NEXT:                  T.reads(_1[v_i0 % 16, v_i0 % 1200 // 240, v_i0 % 240 // 48, v_i0 % 48 // 16])
+# CHECK-NEXT:                  T.writes(_3[v_i0])
+# CHECK-NEXT:                  _3[v_i0] = _1[v_i0 % 16, v_i0 % 1200 // 240, v_i0 % 240 // 48, v_i0 % 48 // 16]
+# CHECK-NEXT:          for ax0, ax1, ax2, ax3 in T.grid(5, 5, 3, 16):
+# CHECK-NEXT:              with T.sblock("T_reshape"):
+# CHECK-NEXT:                  v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+# CHECK-NEXT:                  T.reads(_3[(v_ax0 * 240 + v_ax1 * 48 + v_ax2 * 16 + v_ax3) % 1200])
+# CHECK-NEXT:                  T.writes(T_reshape[v_ax0, v_ax1, v_ax2, v_ax3])
+# CHECK-NEXT:                  T_reshape[v_ax0, v_ax1, v_ax2, v_ax3] = _3[(v_ax0 * 240 + v_ax1 * 48 + v_ax2 * 16 + v_ax3) % 1200]
+# CHECK-NEXT:          for b, h, w, f, r, s, c in T.grid(1, 4, 4, 16, 5, 5, 3):
+# CHECK-NEXT:              with T.sblock("conv"):
+# CHECK-NEXT:                  v_b, v_h, v_w, v_f, v_r, v_s, v_c = T.axis.remap("SSSSRRR", [b, h, w, f, r, s, c])
+# CHECK-NEXT:                  T.reads(pad[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c], T_reshape[v_r, v_s, v_c, v_f])
+# CHECK-NEXT:                  T.writes(conv[v_b, v_h, v_w, v_f])
+# CHECK-NEXT:                  with T.init():
+# CHECK-NEXT:                      conv[v_b, v_h, v_w, v_f] = T.float32(0.0)
+# CHECK-NEXT:                  conv[v_b, v_h, v_w, v_f] = conv[v_b, v_h, v_w, v_f] + pad[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c] * T_reshape[v_r, v_s, v_c, v_f]
+# CHECK-NEXT:  O = sch.get_sblock("conv")
+# CHECK-NEXT:  b, h, w, f, r, s, c, = sch.get_loops(O)
+# CHECK-NEXT:  sch.reorder(b, h, w, f, r, s, c)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
-# CHECK-NEXT:  # from tvm.script import tir as T
+# CHECK-NEXT:  # from tvm.script import tirx as T
+# CHECK-NEXT:  # from tvm.tirx.layout import Axis
 # CHECK-NEXT:  
 # CHECK-NEXT:  @I.ir_module
 # CHECK-NEXT:  class Module:
-# CHECK-NEXT:      @T.prim_func
-# CHECK-NEXT:      def main(_0: T.Buffer((1, 8, 8, 3), "float32"), _1: T.Buffer((16, 5, 5, 3), "float32"), conv: T.Buffer((1, 4, 4, 16), "float32")):
-# CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
-# CHECK-NEXT:          pad = T.allocate([363], "float32", "global")
-# CHECK-NEXT:          _3 = T.allocate([1200], "float32", "global")
-# CHECK-NEXT:          pad_1 = T.Buffer((363,), data=pad)
-# CHECK-NEXT:          for i1, i2, i3 in T.grid(11, 11, 3):
-# CHECK-NEXT:              cse_var_1: T.int32 = i2 * 3
-# CHECK-NEXT:              _0_1 = T.Buffer((192,), data=_0.data)
-# CHECK-NEXT:              pad_1[i1 * 33 + cse_var_1 + i3] = T.if_then_else(2 <= i1 and i1 < 10 and 2 <= i2 and i2 < 10, _0_1[i1 * 24 + cse_var_1 + i3 - 54], T.float32(0.0))
+# CHECK-NEXT:      @T.prim_func(s_tir=True)
+# CHECK-NEXT:      def pad_conv2d_nhwc_mini(_0: T.Buffer((1, 8, 8, 3), "float32"), _1: T.Buffer((16, 5, 5, 3), "float32"), conv: T.Buffer((1, 4, 4, 16), "float32")):
+# CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
+# CHECK-NEXT:          # with T.sblock("root"):
+# CHECK-NEXT:          pad = T.sblock_alloc_buffer((1, 12, 12, 3))
+# CHECK-NEXT:          _3 = T.sblock_alloc_buffer((1200,))
+# CHECK-NEXT:          T_reshape = T.sblock_alloc_buffer((5, 5, 3, 16))
+# CHECK-NEXT:          for i0, i1, i2, i3 in T.grid(1, 12, 12, 3):
+# CHECK-NEXT:              with T.sblock("pad"):
+# CHECK-NEXT:                  v_i0, v_i1, v_i2, v_i3 = T.axis.remap("SSSS", [i0, i1, i2, i3])
+# CHECK-NEXT:                  T.reads(_0[v_i0, v_i1 - 2, v_i2 - 2, v_i3])
+# CHECK-NEXT:                  T.writes(pad[v_i0, v_i1, v_i2, v_i3])
+# CHECK-NEXT:                  pad[v_i0, v_i1, v_i2, v_i3] = T.if_then_else(2 <= v_i1 and v_i1 < 10 and 2 <= v_i2 and v_i2 < 10, _0[v_i0, v_i1 - 2, v_i2 - 2, v_i3], T.float32(0.0))
 # CHECK-NEXT:          for i0 in range(1200):
-# CHECK-NEXT:              _3_1 = T.Buffer((1200,), data=_3)
-# CHECK-NEXT:              _1_1 = T.Buffer((1200,), data=_1.data)
-# CHECK-NEXT:              _3_1[i0] = _1_1[i0 % 16 * 75 + i0 // 16]
-# CHECK-NEXT:          for h, w, f in T.grid(4, 4, 16):
-# CHECK-NEXT:              conv_1 = T.Buffer((256,), data=conv.data)
-# CHECK-NEXT:              conv_1[h * 64 + w * 16 + f] = T.float32(0.0)
-# CHECK-NEXT:              for r, s, c in T.grid(5, 5, 3):
-# CHECK-NEXT:                  cse_var_2: T.int32 = h * 64 + w * 16 + f
-# CHECK-NEXT:                  _3_1 = T.Buffer((1200,), data=_3)
-# CHECK-NEXT:                  conv_1[cse_var_2] = conv_1[cse_var_2] + pad_1[h * 66 + r * 33 + w * 6 + s * 3 + c] * _3_1[r * 240 + s * 48 + c * 16 + f]
+# CHECK-NEXT:              with T.sblock("%3"):
+# CHECK-NEXT:                  v_i0 = T.axis.spatial(1200, i0)
+# CHECK-NEXT:                  T.reads(_1[v_i0 % 16, v_i0 % 1200 // 240, v_i0 % 240 // 48, v_i0 % 48 // 16])
+# CHECK-NEXT:                  T.writes(_3[v_i0])
+# CHECK-NEXT:                  _3[v_i0] = _1[v_i0 % 16, v_i0 % 1200 // 240, v_i0 % 240 // 48, v_i0 % 48 // 16]
+# CHECK-NEXT:          for ax0, ax1, ax2, ax3 in T.grid(5, 5, 3, 16):
+# CHECK-NEXT:              with T.sblock("T_reshape"):
+# CHECK-NEXT:                  v_ax0, v_ax1, v_ax2, v_ax3 = T.axis.remap("SSSS", [ax0, ax1, ax2, ax3])
+# CHECK-NEXT:                  T.reads(_3[(v_ax0 * 240 + v_ax1 * 48 + v_ax2 * 16 + v_ax3) % 1200])
+# CHECK-NEXT:                  T.writes(T_reshape[v_ax0, v_ax1, v_ax2, v_ax3])
+# CHECK-NEXT:                  T_reshape[v_ax0, v_ax1, v_ax2, v_ax3] = _3[(v_ax0 * 240 + v_ax1 * 48 + v_ax2 * 16 + v_ax3) % 1200]
+# CHECK-NEXT:          for b, h, w, f, r, s, c in T.grid(1, 4, 4, 16, 5, 5, 3):
+# CHECK-NEXT:              with T.sblock("conv"):
+# CHECK-NEXT:                  v_b, v_h, v_w, v_f, v_r, v_s, v_c = T.axis.remap("SSSSRRR", [b, h, w, f, r, s, c])
+# CHECK-NEXT:                  T.reads(pad[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c], T_reshape[v_r, v_s, v_c, v_f])
+# CHECK-NEXT:                  T.writes(conv[v_b, v_h, v_w, v_f])
+# CHECK-NEXT:                  with T.init():
+# CHECK-NEXT:                      conv[v_b, v_h, v_w, v_f] = T.float32(0.0)
+# CHECK-NEXT:                  conv[v_b, v_h, v_w, v_f] = conv[v_b, v_h, v_w, v_f] + pad[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c] * T_reshape[v_r, v_s, v_c, v_f]
 # CHECK-NEXT:  CODE: 0

@@ -1,0 +1,23 @@
+#include <stdlib.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern void xtc_tvm_init_runtime();
+static __attribute__((constructor)) void _init() {
+  xtc_tvm_init_runtime();
+}
+
+
+/* Forward call to __tvm_ffi packed function */
+extern int32_t {{tvm_ffi_func_name}}(void *ctx, void *args, int32_t num_args, void *result);
+
+void {{func_name}}(void *ctx, void *args, int32_t num_args, void *result) {
+    (void){{tvm_ffi_func_name}}(ctx, args, num_args, result);
+}
+
+#ifdef __cplusplus
+}
+#endif

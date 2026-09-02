@@ -20,8 +20,8 @@ def sched_tile2(sch):
     print(sch)
     return [
         "reorder(i, i1, i2, j, j1, j2, k, k1)",
-        "split(j, factor=64)",
-        "split(j1, factor=64)",
+        "split(i, factors=[None, 16, 4])",
+        "split(j, factors=[None, 1, 64])",
     ]
 
 def sched_tile2p(sch):
@@ -54,11 +54,9 @@ def sched_tile3wc(sch):
     print(sch)
     # Expected in TVM schedule
     return [
-        "sch[O].reorder(i, j, i_, j_)",
-        "sch[O_W0].compute_at(sch[O], j)",
-        "sch[O_W0].reorder(i1, j1, i_, j_)",
-        "sch[O_W1].compute_at(sch[O_W0], j1)",
-        "sch[O_W1].reorder(k, i2, j2, k1, i3, j3)",
+        "reorder(i, j, i1, j1, k, i2, j2, k1, i3, j3)",
+        "reverse_compute_at(O_W0, j)",
+        "reverse_compute_at(O_W0, j1)",
     ]
 
 def sched_tile_unroll_vec(sch):
@@ -72,11 +70,11 @@ def sched_tile_unroll_vec(sch):
     print(sch)
     # Expected in TVM schedule
     return [
-        "sch[O].reorder(j, k, i, k1, __u_k1, i1, j1, __v_j1)",
-        "sch[O].unroll(__u_k1)",
-        "sch[O].unroll(i1)",
-        "sch[O].unroll(j1)",
-        "sch[O].vectorize(__v_j1)",
+        "reorder(j, k, i, k1, __u_k1, i1, j1, __v_j1)",
+        "unroll(__u_k1)",
+        "unroll(i1)",
+        "unroll(j1)",
+        "vectorize(__v_j1)",
     ]
 
 def check_schedule(impl, sched_func):
@@ -144,15 +142,22 @@ def check_compile_evaluate(imp, schedule, compiler_args, evaluate_args):
 
 @requires_tvm
 @pytest.mark.parametrize(
-    "compiler_args",
+    "module_type",
     (
-        {"shared_lib": True},
-        {"emit_c": True},
-        {"ar_lib": True},
-    )
+        "shared_lib",
+        "emit_c",
+        "ar_lib",
+    ),
 )
-def test_backend_variant(tmpdir, compiler_args):
-    impl = matmul_impl(*MATMUL_ARGS, "matmul", emit_c=True)
+@pytest.mark.parametrize(
+    "bare_ptr",
+    (
+        False,
+        True,
+    ),
+)
+def test_backend_variant(tmpdir, module_type, bare_ptr):
+    impl = matmul_impl(*MATMUL_ARGS, "matmul")
     print(impl.graph)
     libpath = Path(tmpdir) / impl.graph.name
     schedule = check_schedule(impl, sched_tile2p)
@@ -161,7 +166,8 @@ def test_backend_variant(tmpdir, compiler_args):
         schedule,
         {
             "dump_file": str(libpath),
-            **compiler_args,
+            module_type: True,
+            "bare_ptr": bare_ptr,
         },
         {
             "validate": True,

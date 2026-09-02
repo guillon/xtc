@@ -19,13 +19,18 @@ import xtc.backends.tvm as backend
 import xtc.itf as itf
 from xtc.utils.text import jinja_generate_file
 from xtc.utils.tarfile import TarFile
+from xtc.utils.files import relative_to
 
-from xtc.utils.host_tools import disassemble, target_triple
+from xtc.utils.host_tools import (
+    disassemble,
+    target_triple,
+    cc_command,
+    binutils_command,
+)
 
 from .TVMOpsCompiler import (
     TVMExprCompiler,
     TVMScheduledExpr,
-    TVMScheduledExprTE,
     TVMScheduledExprTIR,
 )
 from .TVMOps import (
@@ -33,13 +38,16 @@ from .TVMOps import (
 )
 
 import tvm
+import tvm_ffi
 
 
 __all__ = [
     "TVMCompiler",
 ]
 
+
 TVM_VERSION = Version(tvm.__version__.split("+", 1)[0])
+assert TVM_VERSION >= Version("0.26")
 
 
 class TVMCompiler(itf.comp.Compiler):
@@ -66,9 +74,9 @@ class TVMCompiler(itf.comp.Compiler):
         self.emit_c = kwargs.get("emit_c", False)
         self.target = kwargs.get("target", "native")
         self.arch = kwargs.get("arch", "native")
-        self.tvm_target_options = self._get_tvm_target_options(self.target, self.arch)
         self.tvm_target = "llvm"
-        self.tvm_tgt = f"{self.tvm_target} {self.tvm_target_options}"
+        self.tvm_target_options = self._get_tvm_target_options(self.target, self.arch)
+        self.tvm_tgt = self._get_tvm_target(self.tvm_target, self.tvm_target_options)
         assert not self.executable, f"executable generation not supported yet for TVM"
         assert self.shared_lib or self.emit_c or self.ar_lib, (
             f"shared_lib/ar_lib or C generation is mandatory for TVM"
@@ -86,7 +94,7 @@ class TVMCompiler(itf.comp.Compiler):
     def get_source_ir(self, schedule: itf.schd.Schedule) -> str:
         # The initial lowered Tensor IR, before the schedule is applied.
         op = self._backend._tvm_base
-        expr_compiler = TVMExprCompiler(op, tir_schedule=self._backend._tir_schedule)
+        expr_compiler = TVMExprCompiler(op)
         return expr_compiler.generate().schedule().dumps()
 
     def _save_temp(self, fname: str, content: str) -> None:
@@ -103,7 +111,8 @@ class TVMCompiler(itf.comp.Compiler):
         save_temp = self._save_temp
         op = self._backend._tvm_base
         func_name = self.payload_name
-        packed_func_name = f"packed_{func_name}" if self.bare_ptr else func_name
+        tvm_ffi_func_name = f"__tvm_ffi_{func_name}"
+        compute_func_name = f"{func_name}_compute_"
 
         if self.shared_lib:
             type = "shlib"
@@ -118,16 +127,12 @@ class TVMCompiler(itf.comp.Compiler):
         dump_base = Path(self.dump_file).stem
         lib_path = self.dump_file
         if type in ["arlib", "shlib"]:
-            emit_c_base = f"{lib_path}.export_c"
+            emit_c_base = f"{lib_path}_export_c"
         else:
             emit_c_base = lib_path
-        if self.bare_ptr:
-            packed_lib_path = f"{lib_path}_packed"
-            emit_c_packed_base = f"{emit_c_base}_packed"
-        else:
-            packed_lib_path = lib_path
-            emit_c_packed_base = emit_c_base
-        expr_compiler = TVMExprCompiler(op, tir_schedule=self._backend._tir_schedule)
+        packed_lib_path = f"{lib_path}_tvm_ffi"
+        emit_c_packed_base = f"{emit_c_base}_tvm_ffi"
+        expr_compiler = TVMExprCompiler(op)
         schedulable = expr_compiler.generate()
         if self.print_source_ir or self.save_temps:
             lowered = schedulable.schedule().dumps()
@@ -147,85 +152,46 @@ class TVMCompiler(itf.comp.Compiler):
         if self.emit_c:
             self._build_c(
                 sch,
-                func_name=packed_func_name,
+                func_name=func_name,
                 fname=emit_c_packed_base,
             )
         if type in ["shlib", "arlib"]:
-            built = self._build(sch, func_name=packed_func_name)
+            built = self._build(sch, func_name=func_name)
             if self.save_temps:
                 for idx, mod in enumerate(built._collect_dso_modules()):
-                    llvm_ir = str(mod.get_source("ll"))
+                    llvm_ir = str(mod.inspect_source("ll"))
                     save_temp(f"{dump_base}.lib{idx}.ll", llvm_ir)
                     # This will generate a .tar with the .o files
                     # built.export_library(f"{save_temps_dir}/{packed_lib_path}.tar")
-            if self.print_assembly:
-                with tempfile.TemporaryDirectory() as tdir:
-                    tmpname = f"{tdir}/built"
-                    fname = f"{packed_func_name}_compute_"
-                    self._export_library(built, tmpname, type="shlib")
-                    ext = ".dylib" if sys.platform == "darwin" else ".so"
-                    disassembly = disassemble(
-                        f"{tmpname}{ext}",
-                        function=fname,
-                        section=".text",
-                        color=self.color,
-                    )
-                    print(disassembly, flush=True)
-            self._export_library(built, packed_lib_path, type=type)
+            self._export_archive(built, f"{packed_lib_path}.a")
 
-        csrcs, shlibs, arlibs, headers = [], [], [], []
-        tvm_prefix = Path(tvm.__path__[0])
-        if self.bare_ptr:
-            wrapper = PackedOperatorWrapper(
-                op,
-                func_name,
-                packed_func_name,
-                cc_prefix=self._cc_prefix(),
+        wrapper = PackedOperatorWrapper(
+            op,
+            func_name,
+            tvm_ffi_func_name,
+            arch=self.target,
+            bare_ptr=self.bare_ptr,
+        )
+        if type in ["shlib", "arlib"] and self.emit_c:
+            wrapper.build(emit_c_base, emit_c_packed_base, type="csrc")
+        module_file, module_args = wrapper.build(lib_path, packed_lib_path, type=type)
+        assert Path(module_file).with_suffix("") == Path(lib_path)
+        if type == "shlib" and self.print_assembly:
+            disassembly = disassemble(
+                module_file,
+                function=compute_func_name,
+                section="text",
+                color=self.color,
+                arch=self.target,
             )
-            if type == "shlib":
-                ext = ".dylib" if sys.platform == "darwin" else ".so"
-                wrapper.build(lib_path, packed_lib_path, type=type)
-                shlibs = [f"{packed_lib_path}{ext}"]
-            elif type == "arlib":
-                wrapper.build(lib_path, packed_lib_path, type=type)
-                arlibs = [f"{packed_lib_path}.a"]
-            if self.emit_c:
-                wrapper.build(emit_c_base, emit_c_packed_base, type="csrc")
-                csrcs = [f"{emit_c_packed_base}.c"]
-        if Path(f"{lib_path}.h").exists():
-            headers = [f"{lib_path}.h"]
-        if type in ["shlib", "arlib"]:
-            ext = ".dylib" if sys.platform == "darwin" else ".so"
-            shlibs += [f"{tvm_prefix}/libtvm_runtime{ext}"]
-            # As of now shared_lib/ar_lib takes priority over emit_c
-            return HostModule(
-                dump_base,
-                func_name,
-                f"{lib_path}{ext}" if type == "shlib" else f"{lib_path}.a",
-                type,
-                shlibs=shlibs,
-                arlibs=arlibs,
-                headers=headers,
-                bare_ptr=self.bare_ptr,
-                graph=self._backend._graph,
-            )
-        assert type == "csrc"
-        headers_path = [
-            str(path)
-            for path in [
-                tvm_prefix / "include",
-                tvm_prefix / "3rdparty" / "dlpack" / "include",
-            ]
-        ]
+            print(disassembly, flush=True)
         return HostModule(
             dump_base,
             func_name,
-            f"{lib_path}.c",
-            "csrc",
+            module_file,
+            type,
+            **module_args,
             bare_ptr=self.bare_ptr,
-            csrcs=csrcs,
-            headers=headers,
-            headers_path=headers_path,
             graph=self._backend._graph,
         )
 
@@ -259,7 +225,14 @@ class TVMCompiler(itf.comp.Compiler):
         self._tvm_emit_c(sch, self.tvm_tgt, func_name, fname)
 
     @classmethod
-    def _get_tvm_target_options(cls, target: str, arch: str) -> str:
+    def _get_tvm_target(cls, kind: str, options: dict) -> dict:
+        return {
+            **dict(kind=kind),
+            **options,
+        }
+
+    @classmethod
+    def _get_tvm_target_options(cls, target: str, arch: str) -> dict:
         """
         Returm the tvm target options given the target and arch
         """
@@ -269,7 +242,7 @@ class TVMCompiler(itf.comp.Compiler):
         else:
             assert arch != "native", f"can't pass native arch for non native target"
         tvm_cpu = ""
-        tvm_attrs = ""
+        tvm_attrs = []
         tvm_triple = target_triple(target)
         if target in ["x86_64"]:
             if arch == "avx512":
@@ -279,18 +252,15 @@ class TVMCompiler(itf.comp.Compiler):
         elif target in ["aarch64"]:
             if arch == "neon":
                 tvm_cpu = "cortex-a72"
-                tvm_attrs = "+neon"
-        target_options = []
-        if tvm_triple:
-            target_options.append(f"-mtriple={tvm_triple}")
-        if tvm_cpu:
-            target_options.append(f"-mcpu={tvm_cpu}")
-        if tvm_attrs:
-            target_options.append(f"-mattr={tvm_attrs}")
-        return " ".join(target_options)
+                tvm_attrs += ["+neon"]
+        return {
+            **(dict(mtriple=tvm_triple) if tvm_triple else {}),
+            **(dict(mcpu=tvm_cpu) if tvm_cpu else {}),
+            **(dict(mattr=tvm_attrs) if tvm_attrs else {}),
+        }
 
     @classmethod
-    def _get_tvm_native_target_options(cls) -> str:
+    def _get_tvm_native_target_options(cls) -> dict:
         """
         Returm the tvm target options to pass to llvm.
         """
@@ -299,82 +269,64 @@ class TVMCompiler(itf.comp.Compiler):
         info = get_cpu_info()
         arch = info["arch_string_raw"]
         flags = info.get("flags", [])
-        triple = target_triple(arch)
-        cpu, attrs = "", ""
+        tvm_triple = target_triple(arch)
+        tvm_cpu, tvm_attrs = "", []
         if arch == "x86_64":
             if "avx512f" in flags:
-                cpu = "skylake-avx512"
+                tvm_cpu = "skylake-avx512"
             elif "avx2" in flags:
-                cpu = "core-avx2"
+                tvm_cpu = "core-avx2"
         elif arch == "aarch64":
             if "asimd" in flags:
-                cpu = "cortex-a72"
-                attrs = "+neon"
-        target_options = []
-        if triple:
-            target_options.append(f"-mtriple={triple}")
-        if cpu:
-            target_options.append(f"-mcpu={cpu}")
-        if attrs:
-            target_options.append(f"-mattr={attrs}")
-        return " ".join(target_options)
+                tvm_cpu = "cortex-a72"
+                tvm_attrs += ["+neon"]
+        return {
+            **(dict(mtriple=tvm_triple) if tvm_triple else {}),
+            **(dict(mcpu=tvm_cpu) if tvm_cpu else {}),
+            **(dict(mattr=tvm_attrs) if tvm_attrs else {}),
+        }
 
     @classmethod
-    def _tvm_build_crt_args(cls, target: str) -> dict[str, Any]:
+    def _tvm_build_crt_args(cls, target: dict) -> dict[str, Any]:
         # We use system-lib with crt runtime such that DSO loading works
+        # As of TVM >= 0.26 this is not needed anymore
         # The generated .so can then be used:
         # - for static compilation as soon as the tvm runtime is provided
         # - for dynamic loading from python
-        # Recent version of tvm (i.e. 0.19) have a Runtime object
-        # Older version (i.e. 0.16) support passing runtime options in target
-        try:
-            from tvm.relay.backend import Runtime
-
-            runtime_kwargs = {
-                "runtime": Runtime("crt", {"system-lib": True}),
-            }
-        except:
-            runtime_kwargs = {}
-            if TVM_VERSION < Version("0.21"):
-                target = f"{target} --system-lib --runtime=c"
-
+        runtime_kwargs: dict[str, Any] = {}
         return {
             "target": target,
             **runtime_kwargs,
         }
 
     @classmethod
-    def _tvm_build_crt(cls, sch: TVMScheduledExpr, target: str, cname: str) -> Any:
+    def _tvm_build_crt(cls, sch: TVMScheduledExpr, target: dict, cname: str) -> Any:
         build_kwargs = cls._tvm_build_crt_args(target)
         config = {}
-        if target.startswith("c "):
+        if target["kind"] == "c":
             config.update(
                 {
-                    "tir.disable_vectorize": True,
+                    "tirx.disable_vectorize": True,
                 }
             )
         with tvm.transform.PassContext(opt_level=3, config=config):
-            if isinstance(sch, TVMScheduledExprTE):
-                tensors = sch.schedulable._params
-                built = tvm.build(sch._schedule, tensors, name=cname, **build_kwargs)  # type: ignore
-            else:
-                assert isinstance(sch, TVMScheduledExprTIR)
-                func = sch._schedule.mod[sch.schedulable.expr.name]
-                func = func.with_attr("global_symbol", cname)
-                mod = tvm.IRModule({cname: func})
-                built = tvm.build(mod, **build_kwargs)
+            assert isinstance(sch, TVMScheduledExprTIR)
+            func = sch._schedule.mod[sch.schedulable.expr.name]
+            func = func.with_attr("global_symbol", cname)
+            mod = tvm.IRModule({cname: func})
+            built = tvm.tirx.build(mod, **build_kwargs)
         return built
 
     @classmethod
     def _tvm_emit_c(
         cls,
         sch: TVMScheduledExpr,
-        target: str,
+        target: dict,
         cname: str,
         fname: str,
     ) -> Any:
         # Ignore initial target as of now and generate target agnostic C
-        target = "c -keys=arch -march=generic -mcpu=generic"
+        target = dict(kind="c", keys=["arch"], march="generic", mcpu="generic")
         built = cls._tvm_build_crt(sch, target, cname)
         out_dir = Path(fname).parent
         out_base = Path(fname).stem
@@ -391,32 +343,15 @@ class TVMCompiler(itf.comp.Compiler):
                 cfile = tmp_dir_path / "lib0.c"
             shutil.copy(cfile, out_dir / f"{out_base}.c")
 
-    def _cc_prefix(self) -> str:
-        map = {
-            "x86_64": "x86_64-linux-gnu-",
-            "aarch64": "aarch64-linux-gnu-",
-            "native": "",
-        }
-        assert self.target in map, (
-            f"unsupported target for cross compilation: {self.target}"
+    def _export_archive(self, mod: Any, archive_path: str):
+        from tvm.support import cc
+
+        fcompile = partial(
+            cc.create_staticlib,
+            ar=binutils_command("ar", self.target),
         )
-        return map[self.target]
-
-    def _export_library(self, mod: Any, basename: str, type: str):
-        from tvm.contrib import cc
-
-        prefix = self._cc_prefix()
-        if type == "arlib":
-            fcompile = partial(cc.create_staticlib, ar=f"{prefix}ar")
-            mod.export_library(f"{basename}.a", fcompile=fcompile)
-            assert Path(f"{basename}.a").exists()
-        else:
-            fcompile = None
-            if prefix != "":
-                fcompile = cc.cross_compiler(f"{prefix}g++")
-            assert type == "shlib"
-            ext = ".dylib" if sys.platform == "darwin" else ".so"
-            mod.export_library(f"{basename}{ext}", fcompile=fcompile)
+        mod.export_library(archive_path, fcompile=fcompile)
+        assert Path(archive_path).exists()
 
 
 class PackedOperatorWrapper:
@@ -427,53 +362,113 @@ class PackedOperatorWrapper:
         operation: TVMBaseExpr,
         func_name: str,
         packed_func_name: str,
-        cc_prefix: str = "",
+        arch: str = "",
+        bare_ptr: bool = False,
     ) -> None:
         self.operation = operation
         self.func_name = func_name
         self.packed_func_name = packed_func_name
-        self._cc_prefix = cc_prefix
+        self._arch = arch
+        self._bare_ptr = bare_ptr
 
-    def generate_c(self, output_base: str) -> None:
+    def generate_c(self, output_base: str, header: bool = False) -> None:
         config = {
             "inputs": self.operation.np_inputs_spec(),
             "outputs": self.operation.np_outputs_spec(),
             "func_name": self.func_name,
-            "packed_func_name": self.packed_func_name,
+            "tvm_ffi_func_name": self.packed_func_name,
         }
-        jinja_generate_file(
-            f"{output_base}.c",
-            str(self.TEMPLATES_DIR / "packed_op_wrapper.c.jinja"),
-            **config,
-        )
-        jinja_generate_file(
-            f"{output_base}.h",
-            str(self.TEMPLATES_DIR / "unpacked_op.h.jinja"),
-            **config,
-        )
+        if self._bare_ptr:
+            jinja_generate_file(
+                f"{output_base}.c",
+                str(self.TEMPLATES_DIR / "packed_op_wrapper.c.jinja"),
+                **config,
+            )
+            if header:
+                jinja_generate_file(
+                    f"{output_base}.h",
+                    str(self.TEMPLATES_DIR / "unpacked_op.h.jinja"),
+                    **config,
+                )
+        else:
+            jinja_generate_file(
+                f"{output_base}.c",
+                str(self.TEMPLATES_DIR / "tvm_ffi_op_wrapper.c.jinja"),
+                **config,
+            )
 
-    def build(self, lib_fname: str, packed_lib_fname: str, type: str) -> None:
+    def build(
+        self, lib_fname: str, packed_lib_fname: str, type: str
+    ) -> tuple[str, dict[str, Any]]:
+        ext = ".dylib" if sys.platform == "darwin" else ".so"
         unpacked_lib_dir = Path(lib_fname).parent
         unpacked_lib_base = Path(lib_fname).stem
         packed_lib_dir = Path(packed_lib_fname).parent
         packed_lib_name = Path(packed_lib_fname).stem
+        packed_ar_name = f"{packed_lib_fname}.a"
         assert packed_lib_dir == unpacked_lib_dir, (
             f"must generate wrapper at the same location as packed lib"
         )
-        with tempfile.TemporaryDirectory() as tdir:
+        if type in ["shlib", "arlib"]:
+            assert Path(packed_ar_name).exists()
+        tdir = tempfile.mkdtemp(dir=unpacked_lib_dir)
+        try:
+            tvm_ffi_prefix = Path(tvm_ffi.__path__[0])
+            tvm_ffi_libdir = tvm_ffi_prefix / "lib"
+            tvm_prefix = Path(tvm.__path__[0])
+            tvm_libdir = tvm_prefix / "lib"
             output_base = str(Path(tdir) / Path(lib_fname).stem)
-            self.generate_c(output_base)
-            shutil.copy(f"{output_base}.h", unpacked_lib_dir / f"{unpacked_lib_base}.h")
+            host_runtime_dir = Path(__file__).parents[2] / "csrcs" / "runtimes" / "host"
+            tvm_runtime_init_c = str(host_runtime_dir / "tvm_runtime_init.c")
+            self.generate_c(output_base, header=(type == "csrc"))
+            headers, headers_path, csrcs, shlibs, arlibs = [], [], [], [], []
+            if self._bare_ptr and type == "csrc":
+                shutil.copy(
+                    f"{output_base}.h", unpacked_lib_dir / f"{unpacked_lib_base}.h"
+                )
+                headers += [f"{lib_fname}.h"]
             if type == "csrc":
                 shutil.copy(
                     f"{output_base}.c", unpacked_lib_dir / f"{unpacked_lib_base}.c"
                 )
+                module_file = f"{lib_fname}.c"
+                csrcs += [
+                    tvm_runtime_init_c,
+                    f"{packed_lib_fname}.c",
+                ]
+                headers_path += [
+                    str(path)
+                    for path in [
+                        tvm_prefix / "include",
+                        tvm_ffi_prefix / "include",
+                    ]
+                ]
+                shlibs += [
+                    f"{tvm_libdir}/libtvm_runtime{ext}",
+                    f"{tvm_ffi_libdir}/libtvm_ffi{ext}",
+                ]
             elif type == "shlib":
-                ext = ".dylib" if sys.platform == "darwin" else ".so"
+                output_dir = unpacked_lib_dir
+                object_fnames = [
+                    str(relative_to(fname, output_dir))
+                    for fname in self._build_objects(
+                        [f"{output_base}.c"] + self._runtime_sources(),
+                        tdir,
+                    )
+                ]
+                opts = "-O2"
+                sh_opts = "--shared -fPIC"
+                ext = ".so"
+                if sys.platform == "darwin":
+                    sh_opts += " -undefined dynamic_lookup"
+                    ext = ".dylib"
+                shlib_fname = f"{unpacked_lib_base}{ext}"
+                shlib_dest = str(relative_to(shlib_fname, output_dir))
                 cmd = (
-                    f"{self._cc_prefix}gcc --shared -fPIC -O2 {output_base}.c "
-                    f"-o {unpacked_lib_base}{ext} "
-                    f"{packed_lib_name}{ext} -Wl,--rpath,$ORIGIN"
+                    f"{cc_command(self._arch)} {sh_opts} {opts} "
+                    f"{' '.join(object_fnames)}  "
+                    f"{packed_lib_fname}.a "
+                    f"-o {unpacked_lib_base}{ext}"
                 )
                 p = subprocess.run(
                     shlex.split(cmd),
@@ -483,34 +478,103 @@ class PackedOperatorWrapper:
                 )
                 if p.returncode != 0:
                     raise RuntimeError(
-                        f"Failed command {cmd}:\n{p.stdout}\n{p.stderr}\n"
+                        f"Failed command {cmd} (cwd: {unpacked_lib_dir}:\n"
+                        f"{p.stdout}\n"
+                        f"{p.stderr}\n"
                     )
-            elif type == "arlib":
-                cmd = (
-                    f"{self._cc_prefix}gcc -c -O2 {output_base}.c "
-                    f"-o {unpacked_lib_base}.o"
+                module_file = f"{lib_fname}{ext}"
+                shlibs += [
+                    f"{tvm_libdir}/libtvm_runtime{ext}",
+                    f"{tvm_ffi_libdir}/libtvm_ffi{ext}",
+                ]
+            else:
+                assert type == "arlib"
+                archive_fname = self._build_archive(
+                    [f"{output_base}.c"] + self._runtime_sources(),
+                    f"{lib_fname}.a",
                 )
-                p = subprocess.run(
-                    shlex.split(cmd),
-                    text=True,
-                    capture_output=True,
-                    cwd=unpacked_lib_dir,
+                module_file = archive_fname
+                arlibs += [f"{packed_lib_fname}.a"]
+                shlibs += [
+                    f"{tvm_libdir}/libtvm_runtime{ext}",
+                    f"{tvm_ffi_libdir}/libtvm_ffi{ext}",
+                ]
+        except Exception:
+            raise
+        else:
+            shutil.rmtree(tdir)
+        module_args = {
+            **(dict(headers=headers) if headers else {}),
+            **(dict(headers_path=headers_path) if headers_path else {}),
+            **(dict(csrcs=csrcs) if csrcs else {}),
+            **(dict(shlibs=shlibs) if shlibs else {}),
+            **(dict(arlibs=arlibs) if arlibs else {}),
+        }
+        return module_file, module_args
+
+    def _runtime_sources(self) -> list[str]:
+        host_runtime_dir = Path(__file__).parents[2] / "csrcs" / "runtimes" / "host"
+        tvm_runtime_init_c = str(host_runtime_dir / "tvm_runtime_init.c")
+        return [tvm_runtime_init_c]
+
+    def _build_object(self, source_fname: str, object_fname: str) -> str:
+        assert object_fname.endswith(".o")
+        opts = "-O2"
+        pic_opts = "-fPIC"
+        output_dir = Path(object_fname).parent
+        object_dest = str(relative_to(object_fname, output_dir))
+        source_inp = str(relative_to(source_fname, output_dir))
+        cmd = (
+            f"{cc_command(self._arch)} -c {opts} {pic_opts} "
+            f"{source_inp} "
+            f"-o {object_dest}"
+        )
+        p = subprocess.run(
+            shlex.split(cmd),
+            text=True,
+            capture_output=True,
+            cwd=output_dir,
+        )
+        if p.returncode != 0:
+            raise RuntimeError(
+                f"Failed command {cmd} (cwd: {output_dir} :\n{p.stdout}\n{p.stderr}\n"
+            )
+        return object_fname
+
+    def _build_objects(self, source_fnames: list[str], output_dir: str) -> list[str]:
+        return [
+            self._build_object(fname, str(Path(output_dir) / f"{Path(fname).stem}.o"))
+            for fname in source_fnames
+        ]
+
+    def _build_archive(self, source_fnames: list[str], archive_fname: str) -> str:
+        assert archive_fname.endswith(".a")
+        output_dir = Path(archive_fname).parent
+        archive_dest = str(relative_to(archive_fname, output_dir))
+        tdir = tempfile.mkdtemp(dir=output_dir)
+        try:
+            object_fnames = [
+                str(relative_to(fname, output_dir))
+                for fname in self._build_objects(source_fnames, tdir)
+            ]
+            cmd = (
+                f"{binutils_command('ar', self._arch)} -crs {archive_dest} "
+                f"{' '.join(object_fnames)} "
+            )
+            p = subprocess.run(
+                shlex.split(cmd),
+                text=True,
+                capture_output=True,
+                cwd=output_dir,
+            )
+            if p.returncode != 0:
+                raise RuntimeError(
+                    f"Failed command {cmd} (cwd: {output_dir}:\n"
+                    f"{p.stdout}\n"
+                    f"{p.stderr}\n"
                 )
-                if p.returncode != 0:
-                    raise RuntimeError(
-                        f"Failed command {cmd}:\n{p.stdout}\n{p.stderr}\n"
-                    )
-                cmd = (
-                    f"{self._cc_prefix}ar -crs {unpacked_lib_base}.a "
-                    f"{unpacked_lib_base}.o"
-                )
-                p = subprocess.run(
-                    shlex.split(cmd),
-                    text=True,
-                    capture_output=True,
-                    cwd=unpacked_lib_dir,
-                )
-                if p.returncode != 0:
-                    raise RuntimeError(
-                        f"Failed command {cmd}:\n{p.stdout}\n{p.stderr}\n"
-                    )
+        except Exception:
+            raise
+        else:
+            shutil.rmtree(tdir)
+        return archive_fname

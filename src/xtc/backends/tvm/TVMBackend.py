@@ -27,7 +27,6 @@ class TVMBackend(itf.back.Backend):
         reduction_dims: list[str] | None = None,
         **kwargs: Any,
     ) -> None:
-        self._tir_schedule = kwargs.get("tir_schedule", False)
         self._graph: Graph | None = None
         self._tvm_base: TVMBaseExpr
         if isinstance(source_op, XTCGraph):

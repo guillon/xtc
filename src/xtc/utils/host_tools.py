@@ -60,6 +60,28 @@ def binutils_command(command: str, arch: str = "") -> str:
     return f"{prefix}{command}"
 
 
+def cc_prefix(arch: str = "") -> str:
+    """
+    Returns the cc prefix given the arch.
+    When arch is unspecified, assume no prefix.
+    """
+    triple = target_triple(arch)
+    if not triple:
+        return ""
+    return f"{triple}-"
+
+
+def cc_command(arch: str = "") -> str:
+    """
+    Returns the cc compiler for the given arch.
+    For native prefer cc over gcc.
+    """
+    prefix = cc_prefix(arch)
+    if not prefix:
+        return "cc"
+    return f"{prefix}gcc"
+
+
 def disassemble(
     obj_path: str | Path,
     function: str = "",
@@ -70,22 +92,26 @@ def disassemble(
 ) -> str:
     """
     Returns the disassembled multi-line string for the given obj_path.
-    Optionally disassembling only the given function.
+    Optionally disassembling only the given section or function.
+    Note that section name for Darwin are rewritten .text -> __text
+    and function name function -> _function.
     """
     base_opts = [
         "-dr",
         "--no-addresses",
         "--no-show-raw-insn",
+        "--disassemble",
     ]
     target = target_arch(arch)
     jumps_opts: list[str] = []
-    disass_symbol_opt: list[str] = []
     if target in ["x86_64", "aarch64"] or platform.system() == "Linux":
         jumps_opts = []
-        disass_symbol_opt = [f"--disassemble={function}"]
     elif platform.system() == "Darwin":
+        if section and section.startswith("."):
+            section = f"__{section[1:]}"
+        if function:
+            function = f"_{function}"
         jumps_opts = []
-        disass_symbol_opt = ["--disassemble-symbols=ltmp0"]
     color_opts = [
         "--disassembler-color=on",
     ]
@@ -93,7 +119,6 @@ def disassemble(
     obj_path = Path(obj_path)
     args = [
         *base_opts,
-        *(disass_symbol_opt if function else ["--disassemble"]),
         *(jumps_opts if visualize_jumps else []),
         *(color_opts if color else []),
         str(obj_path),
@@ -113,13 +138,19 @@ def disassemble(
             f"  error code: {p.returncode}"
         )
     output = ""
-    emit = False
-    # Filter out file header and optionally section
+    in_section = False
+    in_function = False
+    # Dump function or section when specified
     for line in p.stdout.splitlines():
         if "section" in line:
-            emit = True
-            if section and not f"section {section}" in line:
-                emit = False
-        if emit:
+            in_function = False
+            in_section = True
+            if section and not section in line:
+                in_section = False
+        if in_section and line.startswith("<"):
+            in_function = True
+            if function and not line.startswith(f"<{function}>"):
+                in_function = False
+        if not function and in_section or in_function:
             output += f"{line}\n"
     return output
