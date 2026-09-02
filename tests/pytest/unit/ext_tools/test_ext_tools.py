@@ -26,7 +26,7 @@ def test_get_library_path_uses_environment_search_paths(
     assert ext_tools.get_library_path("omp") == str(library)
 
 
-def test_get_library_path_falls_back_to_ldconfig(
+def test_get_library_path_uses_ldconfig_from_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     library_name = "libomp.so.5"
@@ -38,7 +38,44 @@ def test_get_library_path_falls_back_to_ldconfig(
     )
     monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
     monkeypatch.delenv("LIBRARY_PATH", raising=False)
+    monkeypatch.setenv("PATH", "/usr/bin:/sbin")
     monkeypatch.setattr(ext_tools.shutil, "which", lambda _name: "/sbin/ldconfig")
+    monkeypatch.setattr(
+        ext_tools.subprocess,
+        "run",
+        lambda *_args, **_kwargs: CompletedProcess(
+            args=["/sbin/ldconfig", "-p"],
+            returncode=0,
+            stdout=f"\t{library_name} (libc6,x86-64) => {library}\n",
+        ),
+    )
+
+    assert ext_tools.get_library_path("omp") == library
+
+
+def test_get_library_path_falls_back_to_sbin_ldconfig_when_not_on_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    library_name = "libomp.so.5"
+    library = "/usr/lib/x86_64-linux-gnu/libomp.so.5"
+
+    monkeypatch.setattr(ext_tools.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        ext_tools.ctypes.util, "find_library", lambda _name: library_name
+    )
+    monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
+    monkeypatch.delenv("LIBRARY_PATH", raising=False)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.setattr(ext_tools.shutil, "which", lambda _name: None)
+
+    original_is_file = ext_tools.Path.is_file
+
+    def is_file(path: Path) -> bool:
+        if path == Path("/sbin/ldconfig"):
+            return True
+        return original_is_file(path)
+
+    monkeypatch.setattr(ext_tools.Path, "is_file", is_file)
     monkeypatch.setattr(
         ext_tools.subprocess,
         "run",
