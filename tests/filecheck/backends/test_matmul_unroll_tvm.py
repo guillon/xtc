@@ -1,0 +1,89 @@
+# RUN: python %s 2>&1 | filecheck %s
+# REQUIRES: module_tvm
+
+import xtc.graphs.xtc.op as O
+from xtc.backends.tvm import Backend
+
+I, J, K, dtype = 4, 32, 256, "float32"
+a = O.tensor((I, K), dtype, name="A")
+b = O.tensor((K, J), dtype, name="B")
+
+with O.graph(name="matmul") as gb:
+    O.matmul(a, b, name="C")
+
+graph = gb.graph
+print(graph)
+
+impl = Backend(graph)
+
+sch = impl.get_scheduler()
+sch.unroll({"k": 4})
+sched = sch.schedule()
+
+comp = impl.get_compiler(
+    shared_lib=True,
+    dump_file="matmul_unroll_tvm",
+    print_source_ir=True,
+    print_transformed_ir=True,
+)
+
+module = comp.compile(sched)
+executor = module.get_executor(validate=True)
+res = executor.execute()
+print(f"CODE: {res}")
+
+# CHECK:       graph:
+# CHECK-NEXT:    name: matmul
+# CHECK-NEXT:    inputs:
+# CHECK-NEXT:    - %0 : 4x256xfloat32
+# CHECK-NEXT:    - %1 : 256x32xfloat32
+# CHECK-NEXT:    outputs:
+# CHECK-NEXT:    - %2 : 4x32xfloat32
+# CHECK-NEXT:    nodes:
+# CHECK-NEXT:    - %2: matmul(%0, %1) {name = 'C'} : [4x256xfloat32, 256x32xfloat32] -> [4x32xfloat32]
+# CHECK-NEXT:  
+# CHECK-NEXT:  # from tvm.script import ir as I
+# CHECK-NEXT:  # from tvm.script import tir as T
+# CHECK-NEXT:  
+# CHECK-NEXT:  @I.ir_module
+# CHECK-NEXT:  class Module:
+# CHECK-NEXT:      @T.prim_func
+# CHECK-NEXT:      def main(_0: T.Buffer((4, 256), "float32"), _1: T.Buffer((256, 32), "float32"), C: T.Buffer((4, 32), "float32")):
+# CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
+# CHECK-NEXT:          for i, j in T.grid(4, 32):
+# CHECK-NEXT:              C_1 = T.Buffer((128,), data=C.data)
+# CHECK-NEXT:              C_1[i * 32 + j] = T.float32(0.0)
+# CHECK-NEXT:              for k in range(256):
+# CHECK-NEXT:                  cse_var_1: T.int32 = i * 32 + j
+# CHECK-NEXT:                  _0_1 = T.Buffer((1024,), data=_0.data)
+# CHECK-NEXT:                  _1_1 = T.Buffer((8192,), data=_1.data)
+# CHECK-NEXT:                  C_1[cse_var_1] = C_1[cse_var_1] + _0_1[i * 256 + k] * _1_1[k * 32 + j]
+# CHECK-NEXT:  O = obj['C']
+# CHECK-NEXT:  i, j, = O.op.axis
+# CHECK-NEXT:  k, = O.op.reduce_axis
+# CHECK-NEXT:  k, __u_k = sch[O].split(k, factor=4)
+# CHECK-NEXT:  sch[O].reorder(i, j, k, __u_k)
+# CHECK-NEXT:  sch[O].unroll(__u_k)
+# CHECK-NEXT:  
+# CHECK-NEXT:  # from tvm.script import ir as I
+# CHECK-NEXT:  # from tvm.script import tir as T
+# CHECK-NEXT:  
+# CHECK-NEXT:  @I.ir_module
+# CHECK-NEXT:  class Module:
+# CHECK-NEXT:      @T.prim_func
+# CHECK-NEXT:      def main(_0: T.Buffer((4, 256), "float32"), _1: T.Buffer((256, 32), "float32"), C: T.Buffer((4, 32), "float32")):
+# CHECK-NEXT:          T.func_attr({"from_legacy_te_schedule": T.bool(True), "tir.noalias": T.bool(True)})
+# CHECK-NEXT:          for i, j in T.grid(4, 32):
+# CHECK-NEXT:              C_1 = T.Buffer((128,), data=C.data)
+# CHECK-NEXT:              C_1[i * 32 + j] = T.float32(0.0)
+# CHECK-NEXT:              for k_outer in range(64):
+# CHECK-NEXT:                  cse_var_3: T.int32 = k_outer * 128 + j
+# CHECK-NEXT:                  cse_var_2: T.int32 = i * 32 + j
+# CHECK-NEXT:                  cse_var_1: T.int32 = i * 256 + k_outer * 4
+# CHECK-NEXT:                  _0_1 = T.Buffer((1024,), data=_0.data)
+# CHECK-NEXT:                  _1_1 = T.Buffer((8192,), data=_1.data)
+# CHECK-NEXT:                  C_1[cse_var_2] = C_1[cse_var_2] + _0_1[cse_var_1] * _1_1[cse_var_3]
+# CHECK-NEXT:                  C_1[cse_var_2] = C_1[cse_var_2] + _0_1[cse_var_1 + 1] * _1_1[cse_var_3 + 32]
+# CHECK-NEXT:                  C_1[cse_var_2] = C_1[cse_var_2] + _0_1[cse_var_1 + 2] * _1_1[cse_var_3 + 64]
+# CHECK-NEXT:                  C_1[cse_var_2] = C_1[cse_var_2] + _0_1[cse_var_1 + 3] * _1_1[cse_var_3 + 96]
+# CHECK-NEXT:  CODE: 0

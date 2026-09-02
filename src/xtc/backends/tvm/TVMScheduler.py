@@ -375,6 +375,7 @@ def tvm_cache_read_factor_offset(
 
 def tvm_update_loopnest_for_codegen(sched: LoopNest) -> LoopNest:
     def _update_loopnode(node: LoopNestNode) -> LoopNestNode:
+        axis_dim = {axis: dim for dim, tiles in node.tiles.items() for axis in tiles}
         adjusted_tiles = {}
         adjusted_unrolling = {
             k: v for k, v in node.unroll.items() if k not in node.vectorize
@@ -382,14 +383,25 @@ def tvm_update_loopnest_for_codegen(sched: LoopNest) -> LoopNest:
         adjusted_unrolls = list(adjusted_unrolling)
         adjusted_vectorization = node.vectorize[:]
         adjusted_permutation = node.interchange[:]
-        for dim, dim_tiles in node.tiles.items():
+        dims_to_update = set(
+            [
+                axis_dim.get(axis, axis)
+                for axis in adjusted_unrolls + adjusted_vectorization
+            ]
+        )
+        tiled_dims = list(node.tiles)
+        additional_dims = sorted(dims_to_update - set(tiled_dims))
+        for dim in tiled_dims + additional_dims:
+            dim_tiles = node.tiles.get(dim, {})
             adjusted_dim_tiles = {}
-            for axis, size in dim_tiles.items():
-                adjusted_dim_tiles.update({axis: size})
+            for axis, size in {dim: 0, **dim_tiles}.items():
+                if size:
+                    adjusted_dim_tiles.update({axis: size})
                 if axis in adjusted_unrolling:
                     assert axis not in adjusted_vectorization
+                    assert axis in adjusted_permutation
                     unroll = adjusted_unrolling[axis]
-                    if unroll < size:
+                    if size == 0 or unroll < size:
                         axis_idx = adjusted_unrolls.index(axis)
                         new_axis = f"__u_{axis}"
                         adjusted_dim_tiles.update({new_axis: unroll})
@@ -402,20 +414,23 @@ def tvm_update_loopnest_for_codegen(sched: LoopNest) -> LoopNest:
                         )
                 elif axis in adjusted_vectorization:
                     assert axis not in adjusted_unrolling
-                    pow2 = pow2divisor(size)
-                    unroll = size // pow2
-                    if unroll > 1:
-                        axis_idx = adjusted_vectorization.index(axis)
-                        new_axis = f"__v_{axis}"
-                        adjusted_dim_tiles.update({new_axis: pow2})
-                        adjusted_vectorization[axis_idx] = new_axis
-                        adjusted_unrolls.append(axis)
-                        adjusted_unrolling.update({axis: unroll})
-                        adjusted_permutation.insert(
-                            adjusted_permutation.index(axis) + 1,
-                            new_axis,
-                        )
-            adjusted_tiles[dim] = adjusted_dim_tiles
+                    assert axis in adjusted_permutation
+                    if size > 0:
+                        pow2 = pow2divisor(size)
+                        unroll = size // pow2
+                        if unroll > 1:
+                            axis_idx = adjusted_vectorization.index(axis)
+                            new_axis = f"__v_{axis}"
+                            adjusted_dim_tiles.update({new_axis: pow2})
+                            adjusted_vectorization[axis_idx] = new_axis
+                            adjusted_unrolls.append(axis)
+                            adjusted_unrolling.update({axis: unroll})
+                            adjusted_permutation.insert(
+                                adjusted_permutation.index(axis) + 1,
+                                new_axis,
+                            )
+            if adjusted_dim_tiles:
+                adjusted_tiles[dim] = adjusted_dim_tiles
         adjusted_unrolling = {u: adjusted_unrolling[u] for u in adjusted_unrolls}
         updated_node = LoopNestNode(
             root=node.root,
