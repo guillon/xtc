@@ -15,8 +15,11 @@ Install a development package while resolving dependencies from PyPI with:
 python -m pip install \
   --index-url https://pypi.org/simple \
   --extra-index-url https://test.pypi.org/simple \
+  --index-strategy unsafe-best-match \
   "xtc-tools==0.3.1.dev1"
 ```
+
+Note: `unsafe-best-match` is necessary as some packages exists in both indexes.
 
 ## Production release
 
