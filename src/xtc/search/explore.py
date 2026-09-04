@@ -118,9 +118,11 @@ class ExplorationConfig:
             self.operator = None
             self.func_name = None
 
-        # Workaround to ensure that TVM backend is after MLIR backends,
-        # otherwise the import of tvm breaks the MLIR python bindings
-        self.backends = sorted(self.backends)
+        # Workaround to ensure that the TVM backend is imported before the MLIR
+        # backends: loading the MLIR wheel's LLVM first and tvm's LLVM second
+        # re-registers an LLVM command-line option and aborts. reverse=True puts
+        # "tvm" ahead of "mlir".
+        self.backends = sorted(self.backends, reverse=True)
 
         if self.operator:
             if not self.func_name:
