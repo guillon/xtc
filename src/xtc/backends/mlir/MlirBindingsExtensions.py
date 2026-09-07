@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+from types import ModuleType
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +27,10 @@ for _module, _module_passes in _EXTENSIONS.items():
         _PASS_OWNER[_pass] = _module
 
 # Extension modules that imported successfully, resolved once at import time.
-_loaded: set[str] = set()
+_loaded: dict[str, ModuleType] = {}
 for _module in _EXTENSIONS:
     try:
-        importlib.import_module(_module)
-        _loaded.add(_module)
+        _loaded[_module] = importlib.import_module(_module)
     except ImportError as _exc:
         logger.debug("MLIR binding extension %r unavailable: %s", _module, _exc)
 
@@ -41,3 +41,10 @@ def passes(pass_names: list[str]) -> list[str]:
         if pass_name not in _PASS_OWNER:
             raise KeyError(f"unknown extension pass: {pass_name!r}")
     return [p for p in pass_names if _PASS_OWNER[p] in _loaded]
+
+
+def module(module_name: str) -> ModuleType | None:
+    """Return the loaded extension module, or None if unavailable."""
+    if module_name not in _EXTENSIONS:
+        raise KeyError(f"unknown extension module: {module_name!r}")
+    return _loaded.get(module_name)

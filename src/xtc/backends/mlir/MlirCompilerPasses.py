@@ -36,11 +36,6 @@ from mlir.ir import Module
 
 import xtc.backends.mlir.MlirBindingsExtensions as binding_extensions
 
-try:
-    import mlir.xtc_transform as xtc_transform
-except ImportError:
-    xtc_transform = None
-
 # Import SDist if available
 try:
     from mlir_sdist.dialects.transform import sdist as sdist_transform
@@ -397,9 +392,10 @@ class MlirProgramInsertTransformPass:
         sched_state: SchedulingState,
         unscheduled_handles: set[str | None],
     ):
+        xtc_transform = binding_extensions.module("mlir.xtc_transform")
         if xtc_transform is None:
             raise ImportError(
-                "mlir.xtc_transform module not installed, required for FuseComsumerOp"
+                "mlir.xtc_transform module not installed, required for FuseConsumerOp"
             )
         assert self._named_sequence is not None
         assert len(schedule.fused_consumers) == 1
