@@ -5,6 +5,9 @@
 from abc import ABC, abstractmethod
 from typing_extensions import override
 from typing import Any, TypeAlias, cast
+import tempfile
+from pathlib import Path
+import shutil
 
 import tvm
 import tvm.te as te
@@ -87,9 +90,21 @@ class TVMSchedulableExprTIR(TVMSchedulableExpr):
         }
         for sched in schedule_map.values():
             if sched:
-                exec(sched, namespace, namespace)
+                self._exec_schedule(sched, namespace)
         sch = cast(TIRSchedule, namespace["sch"])
         return TVMScheduledExprTIR(self, sch)
+
+    def _exec_schedule(self, sched: str, namespace: dict[str, Any]):
+        tdir = Path(tempfile.mkdtemp(dir="."))
+        try:
+            outf = tdir / "schedule.py"
+            outf.write_text(sched)
+            code = compile(sched, outf, "exec")
+            exec(code, namespace, namespace)
+        except Exception:
+            raise
+        else:
+            shutil.rmtree(tdir)
 
 
 class TVMScheduledExpr(ABC):
