@@ -85,7 +85,7 @@ class PlainNodeSchedule:
             for dim in self.dims:
                 self.permutation[DEFAULT_ROOT].extend(
                     [make_loop_name(DEFAULT_ROOT, dim)]
-                    + list(self.tiles[make_loop_name(DEFAULT_ROOT, dim)])
+                    + list(self.tiles.get(make_loop_name(DEFAULT_ROOT, dim), {}))
                 )
 
 
