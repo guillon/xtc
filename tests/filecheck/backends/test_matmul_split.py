@@ -1,5 +1,7 @@
 # RUN: python %s --mlir 2>&1 | filecheck %s
 # RUN: python %s --mlir --descript 2>&1 | filecheck %s
+# RUN: python %s --tvm 2>&1 | filecheck %s
+# RUN: python %s --tvm --descript 2>&1 | filecheck %s
 
 import sys
 import xtc.graphs.xtc.op as O
