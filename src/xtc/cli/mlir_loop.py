@@ -66,6 +66,7 @@ def main():
         [
             args.evaluate,
             args.print_transformed_ir,
+            args.print_bufferization_ir,
             args.print_lowered_ir,
             args.print_assembly,
         ]
@@ -79,6 +80,7 @@ def main():
             "llvm_install_dir": args.llvm_dir,
             "print_source_ir": print_source,
             "print_transformed_ir": args.print_transformed_ir,
+            "print_bufferization_ir": args.print_bufferization_ir,
             "print_lowered_ir": args.print_lowered_ir,
             "print_assembly": args.print_assembly,
             "visualize_jumps": not args.hide_jumps,
@@ -285,6 +287,12 @@ def parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Print the IR after application of the transform dialect.",
+    )
+    parser.add_argument(
+        "--print-bufferization-ir",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Print the IR after the tensor dialect is lowered to memref.",
     )
     parser.add_argument(
         "--print-lowered-ir",
