@@ -11,7 +11,6 @@ from typing import TextIO, TypeAlias
 from io import StringIO
 import numpy as np
 from copy import deepcopy
-import functools
 
 from xtc.utils.math import pow2divisor
 from xtc.itf.schd.scheduler import DEFAULT_ROOT
@@ -89,10 +88,12 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
             axes += t_names
             if not t_tiles:
                 continue
-            factors = functools.reduce(
-                lambda acc, x: acc + [x // acc[-1]], reversed(t_tiles.values()), [1]
-            )
-            t_factors = ["None"] + [str(f) for f in factors[:0:-1]]
+            tile_sizes = list(t_tiles.values())
+            factors = [
+                outer // inner for outer, inner in zip(tile_sizes, tile_sizes[1:])
+            ]
+            factors.append(tile_sizes[-1])
+            t_factors = ["None"] + [str(factor) for factor in factors]
             print(
                 f"{', '.join(t_names)}, = {sch}.split({t_axis}, factors=[{', '.join(t_factors)}])",
                 file=outf,
