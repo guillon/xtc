@@ -28,6 +28,10 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   build:
     if: >
@@ -52,47 +56,121 @@ jobs:
             echo "::error::PR contains merges, always use rebase for updating branches: Merge commits: ${MERGE_COMMITS}" >&2
             exit 1
           fi
+      - name: Compute test cache identity
+        id: test-cache-identity
+        run: |
+          TREE_SHA="$(git rev-parse 'HEAD^{tree}')"
+          CACHE_NAME="xtc-tests-v1-${TREE_SHA}-${{ matrix.os }}-py${{ matrix.python-version }}"
+          echo "tree-sha=${TREE_SHA}" >>"${GITHUB_OUTPUT}"
+          echo "cache-name=${CACHE_NAME}" >>"${GITHUB_OUTPUT}"
+      - name: Look up cached test results
+        id: test-cache
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        env:
+          CACHE_NAME: ${{ steps.test-cache-identity.outputs.cache-name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "hit=false" >>"${GITHUB_OUTPUT}"
+          ARTIFACTS="$(
+            gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/artifacts" \
+              --raw-field name="${CACHE_NAME}" \
+              --raw-field per_page=100 \
+              --jq '.artifacts[] | select(.expired == false) | [.created_at, .workflow_run.id] | @tsv'
+          )"
+          RUN_ID="$(printf '%s\n' "${ARTIFACTS}" | sort -r | head -n 1 | cut -f 2)"
+          if [ -n "${RUN_ID}" ]; then
+            echo "hit=true" >>"${GITHUB_OUTPUT}"
+            echo "run-id=${RUN_ID}" >>"${GITHUB_OUTPUT}"
+          fi
+      - name: Download cached test results
+        if: steps.test-cache.outputs.hit == 'true'
+        uses: actions/download-artifact@v6
+        with:
+          name: ${{ steps.test-cache-identity.outputs.cache-name }}
+          path: xtc-test-cache
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.test-cache.outputs.run-id }}
+          github-token: ${{ github.token }}
+      - name: Validate cached test results
+        if: steps.test-cache.outputs.hit == 'true'
+        env:
+          TREE_SHA: ${{ steps.test-cache-identity.outputs.tree-sha }}
+        run: |
+          MANIFEST=xtc-test-cache/manifest.txt
+          test "$(grep '^schema=' "${MANIFEST}")" = "schema=v1"
+          test "$(grep '^tree=' "${MANIFEST}")" = "tree=${TREE_SHA}"
+          test "$(grep '^os=' "${MANIFEST}")" = "os=${{ matrix.os }}"
+          test "$(grep '^python=' "${MANIFEST}")" = "python=${{ matrix.python-version }}"
+          if [ "${{ matrix.python-version }}" = "3.12" ]; then
+            test -d xtc-test-cache/artifacts
+            rm -rf artifacts
+            mv xtc-test-cache/artifacts artifacts
+          fi
+          {
+            echo "### Test result cache"
+            echo "- Result: hit"
+            echo "- Tree: \`${TREE_SHA}\`"
+            echo "- Source workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${{ steps.test-cache.outputs.run-id }}"
+          } >>"${GITHUB_STEP_SUMMARY}"
+      - name: Report test cache miss
+        if: steps.test-cache.outputs.hit != 'true'
+        env:
+          TREE_SHA: ${{ steps.test-cache-identity.outputs.tree-sha }}
+        run: |
+          {
+            echo "### Test result cache"
+            echo "- Result: miss"
+            echo "- Tree: \`${TREE_SHA}\`"
+          } >>"${GITHUB_STEP_SUMMARY}"
       - name: Install Linux Packages
-        if: runner.os == 'Linux'
+        if: steps.test-cache.outputs.hit != 'true' && runner.os == 'Linux'
         # Note: package cache with awalsh128/cache-apt-pkgs-action does not work correctly, use standard install.
         run: |
           sudo apt install -y build-essential libomp5 binutils-aarch64-linux-gnu binutils-x86-64-linux-gnu libpfm4-dev
       - name: Install macOS Packages
-        if: runner.os == 'macOs'
+        if: steps.test-cache.outputs.hit != 'true' && runner.os == 'macOs'
         run: |
           brew install libomp x86_64-linux-gnu-binutils aarch64-elf-binutils
           export DYLD_LIBRARY_PATH="/opt/homebrew/opt/libomp/lib:${DYLD_LIBRARY_PATH}"
       - name: Set up Python ${{ matrix.python-version }}
+        if: steps.test-cache.outputs.hit != 'true'
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install XTC Package in dev mode
+        if: steps.test-cache.outputs.hit != 'true'
         run: |
           pip install -e .[dev]
       - name: Dump Environment information
+        if: steps.test-cache.outputs.hit != 'true'
         run: |
           python -c 'import sys; print(sys.version)'
           pip list
           env | sort
       - name: Run Checks
+        if: steps.test-cache.outputs.hit != 'true'
         run: |
           COV=scripts/coverage/coverage_run.sh
           $COV make check
       - name: Run Explore One Shot
+        if: steps.test-cache.outputs.hit != 'true'
         run: |
           COV=scripts/coverage/coverage_run.sh
           env STRATEGIES=tile8dvr BACKENDS="tvm mlir" $COV ./scripts/explore/run-explore-one-shot.sh artifacts/explore-one-shot
       - name: Run Explore Variants
+        if: steps.test-cache.outputs.hit != 'true'
         run: |
           COV=scripts/coverage/coverage_run.sh
           env STRATEGIES=tile8dvr BACKENDS="tvm mlir" $COV ./scripts/explore/run-explore-variants.sh artifacts/explore-variants
           env NOSHOW=1 scripts/explore/display-explore-variants.sh artifacts/explore
       - name: Run Explore Optimizers
+        if: steps.test-cache.outputs.hit != 'true'
         run: |
           COV=scripts/coverage/coverage_run.sh
           env TRIALS=20 BATCH=4 SEEDS="1 2 3" scripts/explore/run-explore-optimizers.sh artifacts/explore-optimizers
       - name: Generate Coverage Reports
+        if: steps.test-cache.outputs.hit != 'true'
         run: |
           coverage combine >/dev/null
           coverage report
@@ -116,6 +194,30 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           skip_validation: true
           fail_ci_if_error: true
+      - name: Prepare test result cache
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && steps.test-cache.outputs.hit != 'true' }}
+        env:
+          TREE_SHA: ${{ steps.test-cache-identity.outputs.tree-sha }}
+        run: |
+          rm -rf xtc-test-cache
+          mkdir xtc-test-cache
+          {
+            echo "schema=v1"
+            echo "tree=${TREE_SHA}"
+            echo "os=${{ matrix.os }}"
+            echo "python=${{ matrix.python-version }}"
+          } >xtc-test-cache/manifest.txt
+          if [ "${{ matrix.python-version }}" = "3.12" ]; then
+            cp -R artifacts xtc-test-cache/artifacts
+          fi
+      - name: Cache successful test results
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && steps.test-cache.outputs.hit != 'true' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.test-cache-identity.outputs.cache-name }}
+          path: xtc-test-cache/
+          if-no-files-found: error
+          retention-days: 30
 
   pr-build:
     if: github.event_name == 'pull_request'
