@@ -1257,7 +1257,7 @@ class Strategies:
     @classmethod
     def create(cls, name: str, graph: Graph, *args: Any, **kwargs: Any) -> Strategy:
         registration = cls.registration(name)
-        all_args = {graph, *registration.default_args, *args}
+        all_args = [graph, *registration.default_args, *args]
         all_kwargs = {**registration.default_kwargs, **kwargs}
         return registration.cls(*all_args, **all_kwargs)
 
