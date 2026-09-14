@@ -2,7 +2,7 @@
 """
 Test strategy PRP (one level tiling of parallel axes) on conv2d
 """
-import utils
+import utils.search as utils
 from xtc.search.strategies import Strategy_PRP as Strategy
 
 graph = utils.get_graph_conv2d()

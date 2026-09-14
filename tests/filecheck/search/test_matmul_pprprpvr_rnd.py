@@ -2,7 +2,7 @@
 """
 Test strategy PPRPRPvr (Ansor like tiling, vectorized and constraints) on matmul
 """
-import utils
+import utils.search as utils
 from xtc.search.strategies import Strategy_PPRPRPvr as Strategy
 
 graph = utils.get_graph_matmul()

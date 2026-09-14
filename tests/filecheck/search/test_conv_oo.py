@@ -2,7 +2,7 @@
 """
 Test strategy OO (one level tiling for all axes) on conv2d
 """
-import utils
+import utils.search as utils
 from xtc.search.strategies import Strategy_OO as Strategy
 
 graph = utils.get_graph_conv2d()

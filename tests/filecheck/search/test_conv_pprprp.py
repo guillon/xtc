@@ -2,7 +2,7 @@
 """
 Test strategy PPRPRP (Ansor like tiling for all axes) on conv2d
 """
-import utils
+import utils.search as utils
 from xtc.search.strategies import Strategy_PPRPRP as Strategy
 
 graph = utils.get_graph_conv2d()

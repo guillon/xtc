@@ -2,7 +2,7 @@
 """
 Test strategy P1 (one level unordered tiling for all axes) on matmul
 """
-import utils
+import utils.search as utils
 from xtc.search.strategies import Strategy_P1 as Strategy
 
 graph = utils.get_graph_matmul()
