@@ -2,7 +2,7 @@
 """
 Test strategy Goto with reduced search space on matmul
 """
-import utils
+import utils.search as utils
 from xtc.search.strategies import Strategy_GOTO_R as Strategy
 
 graph = utils.get_graph_matmul()
