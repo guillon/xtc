@@ -4,6 +4,7 @@
 #
 import re
 from typing import Any, cast
+from typing_extensions import override
 
 import tvm
 import tvm.s_tir
@@ -124,6 +125,305 @@ def _buffer_offset(
     for index, stride in zip(indices, strides):
         offset = offset + index * stride
     return offset
+
+
+def _decompose_partitioned_reductions(
+    sch: tvm.s_tir.Schedule,
+    block_names: list[str],
+) -> tvm.s_tir.Schedule:
+    """Decompose reductions hidden below loop-partition scope blocks."""
+    working_on = sch.func_working_on
+    assert working_on is not None
+    old_mod = cast(Any, sch.mod)
+    old_func = old_mod[working_on]
+    target_names = set(block_names)
+    analyzer = tvm.arith.Analyzer()
+    block_infos: dict[str, tuple[Any, list[Any], list[Any]]] = {}
+
+    class BlockCollector(tvm.tirx.stmt_functor.StmtVisitor):
+        def __init__(self) -> None:
+            super().__init__()
+            self.loops: list[Any] = []
+
+        @override
+        def visit_for_(self, op: Any) -> None:
+            self.loops.append(op)
+            super().visit_for_(op)
+            self.loops.pop()
+
+        @override
+        def visit_block_realize_(self, op: Any) -> None:
+            if op.block.name_hint in target_names and op.block.init is not None:
+                reduction_values = [
+                    value
+                    for value, iter_var in zip(
+                        op.iter_values,
+                        op.block.iter_vars,
+                    )
+                    if iter_var.iter_type == 2
+                ]
+                block_infos[op.block.name_hint] = (
+                    op,
+                    list(self.loops),
+                    reduction_values,
+                )
+            super().visit_block_realize_(op)
+
+    collector = BlockCollector()
+    collector.visit_stmt(old_func.body)
+
+    init_by_outer_loop: list[tuple[Any, list[Any]]] = []
+    target_blocks: set[str] = set()
+
+    def group_for(loop: Any) -> list[Any]:
+        for grouped_loop, inits in init_by_outer_loop:
+            if grouped_loop.same_as(loop):
+                return inits
+        new_inits: list[Any] = []
+        init_by_outer_loop.append((loop, new_inits))
+        return new_inits
+
+    def substitute_region(region: Any, substitutions: dict[Any, Any]) -> Any:
+        return tvm.tirx.BufferRegion(
+            region.buffer,
+            [
+                tvm.ir.Range(
+                    tvm.tirx.stmt_functor.substitute(item.min, substitutions),
+                    tvm.tirx.stmt_functor.substitute(
+                        item.min + item.extent,
+                        substitutions,
+                    ),
+                )
+                for item in region.region
+            ],
+        )
+
+    for block_name, (realize, loops, reduction_values) in block_infos.items():
+        reduction_loops = [
+            loop
+            for loop in loops
+            if any(
+                _depends_on(value, loop.loop_var, analyzer)
+                for value in reduction_values
+            )
+        ]
+        if not reduction_loops:
+            continue
+        outer_reduction = reduction_loops[0]
+        outer_index = next(
+            idx for idx, loop in enumerate(loops) if loop.same_as(outer_reduction)
+        )
+        retained_loops = [
+            loop
+            for loop in loops[outer_index + 1 :]
+            if not any(loop.same_as(candidate) for candidate in reduction_loops)
+        ]
+        substitutions = {loop.loop_var: loop.min for loop in reduction_loops}
+        for loop in retained_loops:
+            substitutions[loop.loop_var] = tvm.ir.Var(
+                f"{loop.loop_var.name}_init",
+                loop.loop_var.ty,
+            )
+
+        spatial_iter_vars = []
+        spatial_iter_values = []
+        for value, iter_var in zip(
+            realize.iter_values,
+            realize.block.iter_vars,
+        ):
+            if iter_var.iter_type == 2:
+                continue
+            new_var = tvm.ir.Var(f"{iter_var.var.name}_init", iter_var.var.ty)
+            substitutions[iter_var.var] = new_var
+            spatial_iter_vars.append(
+                tvm.tirx.IterVar(
+                    iter_var.dom,
+                    new_var,
+                    iter_var.iter_type,
+                    iter_var.thread_tag,
+                )
+            )
+            spatial_iter_values.append(
+                tvm.tirx.stmt_functor.substitute(value, substitutions)
+            )
+
+        init_block = tvm.tirx.SBlock(
+            spatial_iter_vars,
+            [],
+            [substitute_region(write, substitutions) for write in realize.block.writes],
+            f"{block_name}_init",
+            tvm.tirx.stmt_functor.substitute(
+                realize.block.init,
+                substitutions,
+            ),
+            None,
+            realize.block.alloc_buffers,
+            realize.block.match_buffers,
+            realize.block.annotations,
+            realize.block.span,
+        )
+        init_stmt: Any = tvm.tirx.SBlockRealize(
+            spatial_iter_values,
+            tvm.tirx.stmt_functor.substitute(realize.predicate, substitutions),
+            init_block,
+            realize.span,
+        )
+        for loop in reversed(retained_loops):
+            init_stmt = tvm.tirx.For(
+                substitutions[loop.loop_var],
+                tvm.tirx.stmt_functor.substitute(loop.min, substitutions),
+                tvm.tirx.stmt_functor.substitute(loop.extent, substitutions),
+                loop.kind,
+                init_stmt,
+                loop.thread_binding,
+                loop.annotations,
+                (
+                    tvm.tirx.stmt_functor.substitute(loop.step, substitutions)
+                    if loop.step is not None
+                    else None
+                ),
+                loop.span,
+            )
+        group_for(outer_reduction).append(init_stmt)
+        target_blocks.add(block_name)
+
+    if not target_blocks:
+        return sch
+
+    def postorder(node: Any) -> Any:
+        if isinstance(node, tvm.tirx.SBlockRealize):
+            block = node.block
+            if block.name_hint not in target_blocks or block.init is None:
+                return node
+            reads = [*block.reads, *block.writes]
+            update_block = tvm.tirx.SBlock(
+                list(block.iter_vars),
+                reads,
+                list(block.writes),
+                f"{block.name_hint}_update",
+                block.body,
+                None,
+                block.alloc_buffers,
+                block.match_buffers,
+                block.annotations,
+                block.span,
+            )
+            return tvm.tirx.SBlockRealize(
+                list(node.iter_values),
+                node.predicate,
+                update_block,
+                node.span,
+            )
+        if isinstance(node, tvm.tirx.For):
+            for outer_loop, init_stmts in init_by_outer_loop:
+                if node.loop_var.same_as(outer_loop.loop_var):
+                    return tvm.tirx.SeqStmt([*init_stmts, node])
+        return node
+
+    new_body = tvm.tirx.stmt_functor.ir_transform(
+        old_func.body,
+        None,
+        postorder,
+        ["tirx.SBlockRealize", "tirx.For"],
+    )
+    new_mod = tvm.IRModule(
+        old_mod.functions,
+        attrs=old_mod.attrs,
+        global_infos=old_mod.global_infos,
+    )
+    new_mod.update_func(working_on, old_func.with_body(new_body))
+    new_sch = tvm.s_tir.Schedule(new_mod)
+    new_sch.work_on(working_on.name_hint)
+    return new_sch
+
+
+def decompose_reduction_initializers(
+    sch: tvm.s_tir.Schedule,
+) -> tvm.s_tir.Schedule:
+    """Separate every reduction initializer from its update loop nest.
+
+    The initializer is inserted immediately before the first loop contributing
+    to a reduction block variable.  Applying this after all regular schedule
+    primitives preserves their annotations on both resulting loop nests and
+    also handles reductions writing to a cache-write buffer. Externalized
+    reductions have already had their initializer decomposed, so they are
+    naturally ignored because they no longer have an init statement.
+    """
+    working_on = sch.func_working_on
+    assert working_on is not None
+
+    func = cast(Any, sch.mod)[working_on]
+    reduction_blocks: list[str] = []
+
+    def collect(node: Any) -> None:
+        if not isinstance(node, tvm.tirx.SBlockRealize):
+            return
+        block = node.block
+        if block.init is not None and any(
+            iter_var.iter_type == 2 for iter_var in block.iter_vars
+        ):
+            reduction_blocks.append(cast(str, block.name_hint))
+
+    tvm.tirx.stmt_functor.post_order_visit(func.body, collect)
+
+    analyzer = tvm.arith.Analyzer()
+    partitioned_blocks: list[str] = []
+    for block_name in dict.fromkeys(reduction_blocks):
+        block = sch.get_sblock(block_name)
+        block_stmt = cast(Any, sch.get(block))
+        block_realizes: list[Any] = []
+
+        def collect_realize(node: Any) -> None:
+            if (
+                isinstance(node, tvm.tirx.SBlockRealize)
+                and node.block.name_hint == block_stmt.name_hint
+            ):
+                block_realizes.append(node)
+
+        current_func = cast(Any, sch.mod)[working_on]
+        tvm.tirx.stmt_functor.post_order_visit(
+            current_func.body,
+            collect_realize,
+        )
+        if len(block_realizes) != 1:
+            raise ValueError(
+                f"Could not uniquely locate reduction block {block_name!r}"
+            )
+
+        block_realize = block_realizes[0]
+        reduction_values = [
+            value
+            for value, iter_var in zip(
+                block_realize.iter_values,
+                block_stmt.iter_vars,
+            )
+            if iter_var.iter_type == 2
+        ]
+        loops = list(sch.get_loops(block))
+        reduction_loop = next(
+            (
+                loop
+                for loop in loops
+                if any(
+                    _depends_on(
+                        value,
+                        cast(Any, sch.get(loop)).loop_var,
+                        analyzer,
+                    )
+                    for value in reduction_values
+                )
+            ),
+            None,
+        )
+        # Loop partitioning introduces scope blocks that hide an outer
+        # reduction loop from TVM's schedule primitive. Handle those blocks in
+        # a final structural rewrite after all directly schedulable reductions.
+        if reduction_loop is None:
+            partitioned_blocks.append(block_name)
+        else:
+            sch.decompose_reduction(block, reduction_loop)
+
+    return _decompose_partitioned_reductions(sch, partitioned_blocks)
 
 
 def externalize_tile_below(

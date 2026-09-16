@@ -55,6 +55,10 @@ class TVMScheduleEmitterTIR(TVMScheduleEmitter):
         print(f'{block} = {sch}.get_sblock("{self._op.name}")', file=outf)
         dims = sched.abstract_dims
         self._dump_schedule_node(block, dims, sched, root)
+        print(
+            f"{sch} = decompose_reduction_initializers({sch})",
+            file=outf,
+        )
 
     def _dump_schedule_node(
         self, block: str, dims: list[str], sched: LoopNest, node: LoopNestNode

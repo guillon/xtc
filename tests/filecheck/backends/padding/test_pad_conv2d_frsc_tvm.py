@@ -86,6 +86,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  O = sch.get_sblock("conv")
 # CHECK-NEXT:  b, h, w, f, r, s, c, = sch.get_loops(O)
 # CHECK-NEXT:  sch.reorder(b, h, w, f, r, s, c)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T
@@ -118,12 +119,16 @@ print(f"CODE: {res}")
 # CHECK-NEXT:                  T.reads(_3[(v_ax0 * 240 + v_ax1 * 48 + v_ax2 * 16 + v_ax3) % 1200])
 # CHECK-NEXT:                  T.writes(T_reshape[v_ax0, v_ax1, v_ax2, v_ax3])
 # CHECK-NEXT:                  T_reshape[v_ax0, v_ax1, v_ax2, v_ax3] = _3[(v_ax0 * 240 + v_ax1 * 48 + v_ax2 * 16 + v_ax3) % 1200]
-# CHECK-NEXT:          for b, h, w, f, r, s, c in T.grid(1, 4, 4, 16, 5, 5, 3):
-# CHECK-NEXT:              with T.sblock("conv"):
-# CHECK-NEXT:                  v_b, v_h, v_w, v_f, v_r, v_s, v_c = T.axis.remap("SSSSRRR", [b, h, w, f, r, s, c])
-# CHECK-NEXT:                  T.reads(pad[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c], T_reshape[v_r, v_s, v_c, v_f])
+# CHECK-NEXT:          for b, h, w, f in T.grid(1, 4, 4, 16):
+# CHECK-NEXT:              with T.sblock("conv_init"):
+# CHECK-NEXT:                  v_b, v_h, v_w, v_f = T.axis.remap("SSSS", [b, h, w, f])
+# CHECK-NEXT:                  T.reads()
 # CHECK-NEXT:                  T.writes(conv[v_b, v_h, v_w, v_f])
-# CHECK-NEXT:                  with T.init():
-# CHECK-NEXT:                      conv[v_b, v_h, v_w, v_f] = T.float32(0.0)
-# CHECK-NEXT:                  conv[v_b, v_h, v_w, v_f] = conv[v_b, v_h, v_w, v_f] + pad[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c] * T_reshape[v_r, v_s, v_c, v_f]
+# CHECK-NEXT:                  conv[v_b, v_h, v_w, v_f] = T.float32(0.0)
+# CHECK-NEXT:              for r, s, c in T.grid(5, 5, 3):
+# CHECK-NEXT:                  with T.sblock("conv_update"):
+# CHECK-NEXT:                      v_b, v_h, v_w, v_f, v_r, v_s, v_c = T.axis.remap("SSSSRRR", [b, h, w, f, r, s, c])
+# CHECK-NEXT:                      T.reads(conv[v_b, v_h, v_w, v_f], pad[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c], T_reshape[v_r, v_s, v_c, v_f])
+# CHECK-NEXT:                      T.writes(conv[v_b, v_h, v_w, v_f])
+# CHECK-NEXT:                      conv[v_b, v_h, v_w, v_f] = conv[v_b, v_h, v_w, v_f] + pad[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c] * T_reshape[v_r, v_s, v_c, v_f]
 # CHECK-NEXT:  CODE: 0

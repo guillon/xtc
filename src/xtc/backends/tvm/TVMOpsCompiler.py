@@ -18,7 +18,11 @@ from .TVMOps import (
     TVMOperation,
     TVMGraph,
 )
-from .TVMScheduleTransforms import externalize_tile_below, loop_partition_rebased
+from .TVMScheduleTransforms import (
+    decompose_reduction_initializers,
+    externalize_tile_below,
+    loop_partition_rebased,
+)
 
 __all__ = [
     "TVMExprCompiler",
@@ -85,6 +89,7 @@ class TVMSchedulableExprTIR(TVMSchedulableExpr):
         sch.work_on(func_name)
         namespace = {
             "sch": sch,
+            "decompose_reduction_initializers": decompose_reduction_initializers,
             "loop_partition_rebased": loop_partition_rebased,
             "externalize_tile_below": externalize_tile_below,
         }

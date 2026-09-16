@@ -101,6 +101,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  j, j0, = sch.split(j, factors=[None, 16])
 # CHECK-NEXT:  sch.reorder(i, j, i0, j0, k)
 # CHECK-NEXT:  sch.reverse_compute_at(O_F0, j0)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T
@@ -116,15 +117,19 @@ print(f"CODE: {res}")
 # CHECK-NEXT:          T_reshape_1 = T.sblock_alloc_buffer((128,))
 # CHECK-NEXT:          relu = T.sblock_alloc_buffer((128,))
 # CHECK-NEXT:          for i_0, j_0, i_1, j_1 in T.grid(2, 2, 2, 16):
+# CHECK-NEXT:              with T.sblock("matmul_init"):
+# CHECK-NEXT:                  v_i = T.axis.spatial(4, i_0 * 2 + i_1)
+# CHECK-NEXT:                  v_j = T.axis.spatial(32, j_0 * 16 + j_1)
+# CHECK-NEXT:                  T.reads()
+# CHECK-NEXT:                  T.writes(matmul[v_i, v_j])
+# CHECK-NEXT:                  matmul[v_i, v_j] = T.float32(0.0)
 # CHECK-NEXT:              for k in range(512):
-# CHECK-NEXT:                  with T.sblock("matmul"):
+# CHECK-NEXT:                  with T.sblock("matmul_update"):
 # CHECK-NEXT:                      v_i = T.axis.spatial(4, i_0 * 2 + i_1)
 # CHECK-NEXT:                      v_j = T.axis.spatial(32, j_0 * 16 + j_1)
 # CHECK-NEXT:                      v_k = T.axis.reduce(512, k)
-# CHECK-NEXT:                      T.reads(_0[v_i, v_k], _1[v_k, v_j])
+# CHECK-NEXT:                      T.reads(matmul[v_i, v_j], _0[v_i, v_k], _1[v_k, v_j])
 # CHECK-NEXT:                      T.writes(matmul[v_i, v_j])
-# CHECK-NEXT:                      with T.init():
-# CHECK-NEXT:                          matmul[v_i, v_j] = T.float32(0.0)
 # CHECK-NEXT:                      matmul[v_i, v_j] = matmul[v_i, v_j] + _0[v_i, v_k] * _1[v_k, v_j]
 # CHECK-NEXT:              with T.sblock("T_reshape"):
 # CHECK-NEXT:                  v_ax0 = T.axis.spatial(128, i_0 * 64 + i_1 * 32 + j_0 * 16 + j_1)

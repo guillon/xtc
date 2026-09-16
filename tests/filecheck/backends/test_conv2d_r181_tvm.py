@@ -76,6 +76,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  sch.unroll(w1)
 # CHECK-NEXT:  sch.unroll(__u_c)
 # CHECK-NEXT:  sch.vectorize(f1)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T
@@ -87,19 +88,27 @@ print(f"CODE: {res}")
 # CHECK-NEXT:      def conv2d_nhwc_r181(_0: T.Buffer((1, 230, 230, 3), "float32"), _1: T.Buffer((7, 7, 3, 64), "float32"), O: T.Buffer((1, 112, 112, 64), "float32")):
 # CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
 # CHECK-NEXT:          # with T.sblock("root"):
-# CHECK-NEXT:          for b, h, w_0, f_0, r, s, c_0 in T.grid(1, 112, 28, 4, 7, 7, 1):
-# CHECK-NEXT:              for c_1 in T.unroll(3):
-# CHECK-NEXT:                  for w_1 in T.unroll(4):
-# CHECK-NEXT:                      for f_1 in T.vectorized(16):
-# CHECK-NEXT:                          with T.sblock("O"):
-# CHECK-NEXT:                              v_b, v_h = T.axis.remap("SS", [b, h])
-# CHECK-NEXT:                              v_w = T.axis.spatial(112, w_0 * 4 + w_1)
-# CHECK-NEXT:                              v_f = T.axis.spatial(64, f_0 * 16 + f_1)
-# CHECK-NEXT:                              v_r, v_s = T.axis.remap("RR", [r, s])
-# CHECK-NEXT:                              v_c = T.axis.reduce(3, c_0 * 3 + c_1)
-# CHECK-NEXT:                              T.reads(_0[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c], _1[v_r, v_s, v_c, v_f])
-# CHECK-NEXT:                              T.writes(O[v_b, v_h, v_w, v_f])
-# CHECK-NEXT:                              with T.init():
-# CHECK-NEXT:                                  O[v_b, v_h, v_w, v_f] = T.float32(0.0)
-# CHECK-NEXT:                              O[v_b, v_h, v_w, v_f] = O[v_b, v_h, v_w, v_f] + _0[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c] * _1[v_r, v_s, v_c, v_f]
+# CHECK-NEXT:          for b, h, w_0, f_0 in T.grid(1, 112, 28, 4):
+# CHECK-NEXT:              for w_1_init in T.unroll(4):
+# CHECK-NEXT:                  for f_1_init in T.vectorized(16):
+# CHECK-NEXT:                      with T.sblock("O_init"):
+# CHECK-NEXT:                          v_b, v_h = T.axis.remap("SS", [b, h])
+# CHECK-NEXT:                          v_w = T.axis.spatial(112, w_0 * 4 + w_1_init)
+# CHECK-NEXT:                          v_f = T.axis.spatial(64, f_0 * 16 + f_1_init)
+# CHECK-NEXT:                          T.reads()
+# CHECK-NEXT:                          T.writes(O[v_b, v_h, v_w, v_f])
+# CHECK-NEXT:                          O[v_b, v_h, v_w, v_f] = T.float32(0.0)
+# CHECK-NEXT:              for r, s, c_0 in T.grid(7, 7, 1):
+# CHECK-NEXT:                  for c_1 in T.unroll(3):
+# CHECK-NEXT:                      for w_1 in T.unroll(4):
+# CHECK-NEXT:                          for f_1 in T.vectorized(16):
+# CHECK-NEXT:                              with T.sblock("O_update"):
+# CHECK-NEXT:                                  v_b, v_h = T.axis.remap("SS", [b, h])
+# CHECK-NEXT:                                  v_w = T.axis.spatial(112, w_0 * 4 + w_1)
+# CHECK-NEXT:                                  v_f = T.axis.spatial(64, f_0 * 16 + f_1)
+# CHECK-NEXT:                                  v_r, v_s = T.axis.remap("RR", [r, s])
+# CHECK-NEXT:                                  v_c = T.axis.reduce(3, c_0 * 3 + c_1)
+# CHECK-NEXT:                                  T.reads(O[v_b, v_h, v_w, v_f], _0[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c], _1[v_r, v_s, v_c, v_f])
+# CHECK-NEXT:                                  T.writes(O[v_b, v_h, v_w, v_f])
+# CHECK-NEXT:                                  O[v_b, v_h, v_w, v_f] = O[v_b, v_h, v_w, v_f] + _0[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c] * _1[v_r, v_s, v_c, v_f]
 # CHECK-NEXT:  CODE: 0

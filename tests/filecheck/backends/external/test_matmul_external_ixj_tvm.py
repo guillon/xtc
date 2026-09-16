@@ -50,6 +50,7 @@ print("VALID:", isinstance(res, float))
 # CHECK-NEXT:  j, j1, = sch.split(j, factors=[None, 16])
 # CHECK-NEXT:  sch.reorder(i, j, k, i1, j1)
 # CHECK-NEXT:  sch = externalize_tile_below(sch, O, k, 'external_matmul_uk_ixj')
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T

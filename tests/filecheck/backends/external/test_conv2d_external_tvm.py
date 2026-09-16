@@ -63,6 +63,7 @@ print("VALID:", isinstance(res, float))
 # CHECK-NEXT:  c, c0, = sch.split(c, factors=[None, 4])
 # CHECK-NEXT:  sch.reorder(b, h, w, f, r, s, c, w0, c0, f0)
 # CHECK-NEXT:  sch = externalize_tile_below(sch, O, c, 'external_conv2d_uk_wxcxf')
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T

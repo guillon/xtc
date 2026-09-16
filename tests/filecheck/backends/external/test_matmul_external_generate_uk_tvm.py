@@ -91,6 +91,7 @@ shutil.rmtree(tdir)
 # CHECK-NEXT:  k, k0, = sch.split(k, factors=[None, 16])
 # CHECK-NEXT:  sch.reorder(i, j, i0, j0, k, i1, j1, i2, j2, k0)
 # CHECK-NEXT:  sch = externalize_tile_below(sch, O, j1, 'external_matmul_uk_ixjxk_8x16')
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T
