@@ -199,6 +199,9 @@ class TVMCompiler(itf.comp.Compiler):
         assert Path(module_file).with_suffix("") == Path(lib_path)
         if self.save_temps:
             self._save_temp_file(module_file)
+            for csrc in module_args.get("csrcs", []):
+                self._save_temp_file(csrc)
+
         if type == "shlib" and self.print_assembly:
             disassembly = disassemble(
                 module_file,
@@ -504,13 +507,12 @@ class PackedOperatorWrapper:
                 if sys.platform == "darwin":
                     sh_opts += " -undefined dynamic_lookup"
                     ext = ".dylib"
-                shlib_fname = f"{unpacked_lib_base}{ext}"
-                shlib_dest = str(relative_to(shlib_fname, output_dir))
+                shlib_fname = f"{lib_fname}{ext}"
                 cmd = (
                     f"{cc_command(self._arch)} {sh_opts} {opts} "
                     f"{' '.join(object_fnames)}  "
                     f"{relative_to(packed_lib_fname, output_dir)}.a "
-                    f"-o {unpacked_lib_base}{ext}"
+                    f"-o {relative_to(shlib_fname, output_dir)}"
                 )
                 p = subprocess.run(
                     shlex.split(cmd),
@@ -524,7 +526,7 @@ class PackedOperatorWrapper:
                         f"{p.stdout}\n"
                         f"{p.stderr}\n"
                     )
-                module_file = f"{lib_fname}{ext}"
+                module_file = shlib_fname
                 shlibs += [
                     f"{tvm_libdir}/libtvm_runtime{ext}",
                     f"{tvm_ffi_libdir}/libtvm_ffi{ext}",
