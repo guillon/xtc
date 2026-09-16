@@ -14,6 +14,7 @@ dependencies = [
     'py-cpuinfo',
     'tqdm',
     'typing_extensions',
+    'xtc-build~=0.1.0',
     'pyyaml',
     'scikit-learn',
     'xdsl~=0.57.1',
