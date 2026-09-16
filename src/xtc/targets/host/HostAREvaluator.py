@@ -6,10 +6,15 @@ from typing import Any
 from typing_extensions import override
 import tempfile
 from pathlib import Path
-import subprocess
-import shlex
 import shutil
 import sys
+
+from xtc_build import (
+    BuildContext,
+    ExternalArchive,
+    ExternalSharedLibrary,
+    SharedLibrary,
+)
 
 import xtc.itf as itf
 import xtc.targets.host as host
@@ -40,44 +45,35 @@ class HostAREvaluator(itf.exec.Evaluator):
     def module(self) -> itf.comp.Module:
         return self._module
 
-    def _compile_to_shlib(self, shlib_base: str):
-        cwd_dir = Path(shlib_base).parent
-        shlib_name = Path(shlib_base).stem
-        opts = " ".join(cc_opts)
-        sh_opts = "--shared -fPIC"
-        arlibs = [
-            str(Path(fname).absolute())
-            for fname in [self._module.file_name] + self._module.arlibs
+    def _compile_to_shlib(self, build_dir: Path, shlib_name: str) -> Path:
+        archives = [
+            ExternalArchive(fname, pic=True)
+            for fname in [self._module.file_name, *self._module.arlibs]
         ]
-        opt_whole, opt_no_whole = "-Wl,--whole-archive", "-Wl,--no-whole-archive"
-        ext = ".so"
+        libraries = [ExternalSharedLibrary(fname) for fname in self._module.shlibs]
+        symbol = self._module.payload_name
         if sys.platform == "darwin":
-            sh_opts += " -undefined dynamic_lookup"
-            opt_whole, opt_no_whole = "-Wl,-all_load", ""
-            ext = ".dylib"
-        cmd = (
-            f"cc {sh_opts} {opts} "
-            f"{opt_whole}  "
-            f"{' '.join(arlibs)} "
-            f"{opt_no_whole}  "
-            f"-o {shlib_name}{ext}"
+            symbol = f"_{symbol}"
+        link_flags = [*cc_opts, f"-Wl,-u,{symbol}"]
+        if sys.platform == "darwin":
+            link_flags.extend(["-undefined", "dynamic_lookup"])
+        library = SharedLibrary(
+            shlib_name,
+            archives=archives,
+            libraries=libraries,
+            link_flags=link_flags,
         )
-        p = subprocess.run(
-            shlex.split(cmd), text=True, capture_output=True, cwd=cwd_dir
-        )
-        if p.returncode != 0:
-            raise RuntimeError(f"Failed command {cmd}:\n{p.stdout}\n{p.stderr}\n")
+        return library.build(BuildContext(build_dir=build_dir))
 
     def _build_shlib_module(self) -> None:
         self.tmp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         c_stem = Path(self._module.file_name).stem
-        shlib_base = str(Path(self.tmp_dir.name) / f"{c_stem}_eval")
-        self._compile_to_shlib(shlib_base)
-        ext = ".dylib" if sys.platform == "darwin" else ".so"
+        shlib_name = f"{c_stem}_eval"
+        shlib_path = self._compile_to_shlib(Path(self.tmp_dir.name), shlib_name)
         self._shlib_module: host.HostModule = host.HostModule(
-            shlib_base,
+            shlib_name,
             self._module.payload_name,
-            f"{shlib_base}{ext}",
+            str(shlib_path),
             "shlib",
             bare_ptr=self._module._bare_ptr,
             graph=self._module._graph,

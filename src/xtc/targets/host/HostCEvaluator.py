@@ -6,10 +6,16 @@ from typing import Any
 from typing_extensions import override
 import tempfile
 from pathlib import Path
-import subprocess
-import shlex
 import shutil
 import sys
+
+from xtc_build import (
+    BuildContext,
+    ExternalArchive,
+    ExternalSharedLibrary,
+    Object,
+    SharedLibrary,
+)
 
 import xtc.itf as itf
 import xtc.targets.host as host
@@ -38,45 +44,47 @@ class HostCEvaluator(itf.exec.Evaluator):
     def module(self) -> itf.comp.Module:
         return self._module
 
-    def _compile_to_shlib(self, shlib_base: str):
-        cwd_dir = Path(shlib_base).parent
-        shlib_name = Path(shlib_base).stem
-        opts = " ".join(cc_opts)
-        sh_opts = "--shared -fPIC"
-        csrcs = [
-            str(Path(fname).absolute())
-            for fname in [self._module.file_name] + self._module.csrcs
+    def _compile_to_shlib(self, build_dir: Path, shlib_name: str) -> Path:
+        sources = [self._module.file_name, *self._module.csrcs]
+        includes = [
+            *(Path(header).parent for header in self._module.headers),
+            *(Path(path) for path in self._module.headers_path),
         ]
-        hdrs_path = [
-            str(Path(header).absolute().parent) for header in self._module.headers
+        includes = list(dict.fromkeys(includes))
+        objects = [
+            Object(
+                name=f"{index:04d}_{Path(source).stem}",
+                source=source,
+                inputs=self._module.headers,
+                includes=includes,
+                compile_flags=cc_opts,
+                pic=True,
+            )
+            for index, source in enumerate(sources)
         ]
-        hdrs_path += self._module.headers_path
-        hdrs_path = list(dict.fromkeys(hdrs_path))
-        hdrs_opts = [f"-I{path}" for path in hdrs_path]
-        ext = ".so"
+        archives = [ExternalArchive(path, pic=True) for path in self._module.arlibs]
+        libraries = [ExternalSharedLibrary(path) for path in self._module.shlibs]
+        link_flags = [*cc_opts]
         if sys.platform == "darwin":
-            sh_opts += " -undefined dynamic_lookup"
-            ext = ".dylib"
-        cmd = (
-            f"cc {sh_opts} {opts} {' '.join(hdrs_opts)} {' '.join(csrcs)} "
-            f"-o {shlib_name}{ext} "
+            link_flags.extend(["-undefined", "dynamic_lookup"])
+        library = SharedLibrary(
+            shlib_name,
+            objects=objects,
+            archives=archives,
+            libraries=libraries,
+            link_flags=link_flags,
         )
-        p = subprocess.run(
-            shlex.split(cmd), text=True, capture_output=True, cwd=cwd_dir
-        )
-        if p.returncode != 0:
-            raise RuntimeError(f"Failed command {cmd}:\n{p.stdout}\n{p.stderr}\n")
+        return library.build(BuildContext(build_dir=build_dir))
 
     def _build_shlib_module(self) -> None:
         self.tmp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         c_stem = Path(self._module.file_name).stem
-        shlib_base = str(Path(self.tmp_dir.name) / f"{c_stem}_eval")
-        self._compile_to_shlib(shlib_base)
-        ext = ".dylib" if sys.platform == "darwin" else ".so"
+        shlib_name = f"{c_stem}_eval"
+        shlib_path = self._compile_to_shlib(Path(self.tmp_dir.name), shlib_name)
         self._shlib_module: host.HostModule = host.HostModule(
-            shlib_base,
+            shlib_name,
             self._module.payload_name,
-            f"{shlib_base}{ext}",
+            str(shlib_path),
             "shlib",
             bare_ptr=self._module._bare_ptr,
             graph=self._module._graph,

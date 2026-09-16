@@ -7,11 +7,19 @@ from typing_extensions import override
 import tempfile
 from pathlib import Path
 import shutil
-import subprocess
-import shlex
 import sys
 from functools import partial
 from packaging.version import Version
+
+from xtc_build import (
+    Archive,
+    BuildContext,
+    ExternalArchive,
+    ExternalSharedLibrary,
+    GnuToolchain,
+    Object,
+    SharedLibrary,
+)
 
 from xtc.targets.host import HostModule
 
@@ -19,7 +27,6 @@ import xtc.backends.tvm as backend
 import xtc.itf as itf
 from xtc.utils.text import jinja_generate_file
 from xtc.utils.tarfile import TarFile
-from xtc.utils.files import relative_to
 from xtc.utils.ext_tools import cc_opts
 
 from xtc.utils.host_tools import (
@@ -199,6 +206,9 @@ class TVMCompiler(itf.comp.Compiler):
         assert Path(module_file).with_suffix("") == Path(lib_path)
         if self.save_temps:
             self._save_temp_file(module_file)
+            for csrc in module_args.get("csrcs", []):
+                self._save_temp_file(csrc)
+
         if type == "shlib" and self.print_assembly:
             disassembly = disassemble(
                 module_file,
@@ -440,7 +450,6 @@ class PackedOperatorWrapper:
         unpacked_lib_dir = Path(lib_fname).parent
         unpacked_lib_base = Path(lib_fname).stem
         packed_lib_dir = Path(packed_lib_fname).parent
-        packed_lib_name = Path(packed_lib_fname).stem
         packed_ar_name = f"{packed_lib_fname}.a"
         assert packed_lib_dir == unpacked_lib_dir, (
             f"must generate wrapper at the same location as packed lib"
@@ -484,69 +493,53 @@ class PackedOperatorWrapper:
                     f"{tvm_libdir}/libtvm_runtime{ext}",
                     f"{tvm_ffi_libdir}/libtvm_ffi{ext}",
                 ]
-            elif type == "shlib":
-                output_dir = unpacked_lib_dir
-                base_sources = [f"{output_base}.c"] + self._runtime_sources()
-                xflags = [None] * len(base_sources) + [additional_csrcs_xflags] * len(
-                    additional_csrcs
-                )
-                object_fnames = [
-                    str(relative_to(fname, output_dir))
-                    for fname in self._build_objects(
-                        base_sources + additional_csrcs,
-                        tdir,
-                        xflags=xflags,
-                    )
-                ]
-                opts = " ".join(cc_opts)
-                sh_opts = "--shared -fPIC"
-                ext = ".so"
-                if sys.platform == "darwin":
-                    sh_opts += " -undefined dynamic_lookup"
-                    ext = ".dylib"
-                shlib_fname = f"{unpacked_lib_base}{ext}"
-                shlib_dest = str(relative_to(shlib_fname, output_dir))
-                cmd = (
-                    f"{cc_command(self._arch)} {sh_opts} {opts} "
-                    f"{' '.join(object_fnames)}  "
-                    f"{relative_to(packed_lib_fname, output_dir)}.a "
-                    f"-o {unpacked_lib_base}{ext}"
-                )
-                p = subprocess.run(
-                    shlex.split(cmd),
-                    text=True,
-                    capture_output=True,
-                    cwd=output_dir,
-                )
-                if p.returncode != 0:
-                    raise RuntimeError(
-                        f"Failed command {cmd} (cwd: {output_dir}:\n"
-                        f"{p.stdout}\n"
-                        f"{p.stderr}\n"
-                    )
-                module_file = f"{lib_fname}{ext}"
-                shlibs += [
-                    f"{tvm_libdir}/libtvm_runtime{ext}",
-                    f"{tvm_ffi_libdir}/libtvm_ffi{ext}",
-                ]
             else:
-                assert type == "arlib"
-                base_sources = [f"{output_base}.c"] + self._runtime_sources()
-                xflags = [None] * len(base_sources) + [additional_csrcs_xflags] * len(
+                assert type in ["shlib", "arlib"]
+                base_sources = [f"{output_base}.c", *self._runtime_sources()]
+                sources = [*base_sources, *additional_csrcs]
+                xflags = [""] * len(base_sources) + [additional_csrcs_xflags] * len(
                     additional_csrcs
                 )
-                archive_fname = self._build_archive(
-                    base_sources + additional_csrcs,
-                    f"{lib_fname}.a",
-                    tdir,
-                    xflags=xflags,
+                objects = [
+                    Object(
+                        name=f"{index:04d}_{Path(source).stem}",
+                        source=source,
+                        compile_flags=flags,
+                        pic=True,
+                    )
+                    for index, (source, flags) in enumerate(zip(sources, xflags))
+                ]
+                context = BuildContext(
+                    build_dir=tdir,
+                    toolchain=GnuToolchain(
+                        cc=cc_command(self._arch),
+                        ar=binutils_command("ar", self._arch),
+                    ),
+                    compile_flags=cc_opts,
                 )
-                module_file = archive_fname
-                arlibs += [f"{packed_lib_fname}.a"]
                 shlibs += [
                     f"{tvm_libdir}/libtvm_runtime{ext}",
                     f"{tvm_ffi_libdir}/libtvm_ffi{ext}",
                 ]
+                if type == "shlib":
+                    link_flags = [*cc_opts]
+                    if sys.platform == "darwin":
+                        link_flags.extend(["-undefined", "dynamic_lookup"])
+                    library = SharedLibrary(
+                        unpacked_lib_base,
+                        objects=objects,
+                        archives=[ExternalArchive(packed_ar_name, pic=True)],
+                        libraries=[ExternalSharedLibrary(path) for path in shlibs],
+                        link_flags=link_flags,
+                    )
+                    built_path = library.build(context)
+                    module_file = f"{lib_fname}{ext}"
+                else:
+                    archive = Archive(unpacked_lib_base, objects=objects)
+                    built_path = archive.build(context)
+                    module_file = f"{lib_fname}.a"
+                    arlibs += [packed_ar_name]
+                shutil.move(built_path, module_file)
         except Exception:
             raise
         else:
@@ -564,93 +557,3 @@ class PackedOperatorWrapper:
         host_runtime_dir = Path(__file__).parents[2] / "csrcs" / "runtimes" / "host"
         tvm_runtime_init_c = str(host_runtime_dir / "tvm_runtime_init.c")
         return [tvm_runtime_init_c]
-
-    def _build_object(
-        self,
-        source_fname: str,
-        object_fname: str,
-        flags: str | None = None,
-        xflags: str | None = None,
-    ) -> str:
-        assert object_fname.endswith(".o")
-        flags = " ".join(cc_opts) if flags is None else flags
-        xflags = "" if xflags is None else xflags
-        pic_flags = "-fPIC"
-        output_dir = Path(object_fname).parent
-        object_dest = str(relative_to(object_fname, output_dir))
-        source_inp = str(relative_to(source_fname, output_dir))
-        cmd = (
-            f"{cc_command(self._arch)} -c {pic_flags} {flags} {xflags} "
-            f"{source_inp} "
-            f"-o {object_dest}"
-        )
-        p = subprocess.run(
-            shlex.split(cmd),
-            text=True,
-            capture_output=True,
-            cwd=output_dir,
-        )
-        if p.returncode != 0:
-            raise RuntimeError(
-                f"Failed command {cmd} (cwd: {output_dir} :\n{p.stdout}\n{p.stderr}\n"
-            )
-        return object_fname
-
-    def _build_objects(
-        self,
-        source_fnames: list[str],
-        output_dir: str,
-        flags: list[str | None] | str | None = None,
-        xflags: list[str | None] | str | None = None,
-    ) -> list[str]:
-        if not isinstance(flags, list):
-            flags = [flags] * len(source_fnames)
-        if not isinstance(xflags, list):
-            xflags = [xflags] * len(source_fnames)
-        return [
-            self._build_object(
-                fname,
-                str(Path(output_dir) / f"{Path(fname).stem}.o"),
-                flags,
-                xflags,
-            )
-            for fname, (flags, xflags) in zip(source_fnames, zip(flags, xflags))
-        ]
-
-    def _build_archive(
-        self,
-        source_fnames: list[str],
-        archive_fname: str,
-        flags: list[str | None] | str | None = None,
-        xflags: list[str | None] | str | None = None,
-    ) -> str:
-        assert archive_fname.endswith(".a")
-        output_dir = Path(archive_fname).parent
-        archive_dest = str(relative_to(archive_fname, output_dir))
-        tdir = tempfile.mkdtemp(dir=output_dir)
-        try:
-            object_fnames = [
-                str(relative_to(fname, output_dir))
-                for fname in self._build_objects(source_fnames, tdir, flags, xflags)
-            ]
-            cmd = (
-                f"{binutils_command('ar', self._arch)} -crs {archive_dest} "
-                f"{' '.join(object_fnames)} "
-            )
-            p = subprocess.run(
-                shlex.split(cmd),
-                text=True,
-                capture_output=True,
-                cwd=output_dir,
-            )
-            if p.returncode != 0:
-                raise RuntimeError(
-                    f"Failed command {cmd} (cwd: {output_dir}:\n"
-                    f"{p.stdout}\n"
-                    f"{p.stderr}\n"
-                )
-        except Exception:
-            raise
-        else:
-            shutil.rmtree(tdir)
-        return archive_fname
