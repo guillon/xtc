@@ -268,11 +268,9 @@ class TVMOperatorMatmul(TVMOperator):
         k = te.reduce_axis((0, Kk), "k")
         O = te.compute(
             (Ki, Kj),
-            lambda i, j: (
-                te.sum(
-                    A[i, k] * B[k, j],
-                    axis=k,
-                )
+            lambda i, j: te.sum(
+                A[i, k] * B[k, j],
+                axis=k,
             ),
             name=self.name,
         )
@@ -405,11 +403,9 @@ class TVMOperatorConv2D(TVMOperator):
         Ksh, Ksw = self.attrs["stride"]
         O = te.compute(
             out_dims,
-            lambda b, h, w, f: (
-                te.sum(
-                    A[b, h * Ksh + r, w * Ksw + s, c] * W[r, s, c, f],
-                    axis=(r, s, c),
-                )
+            lambda b, h, w, f: te.sum(
+                A[b, h * Ksh + r, w * Ksw + s, c] * W[r, s, c, f],
+                axis=(r, s, c),
             ),
             name=self.name,
         )
@@ -507,12 +503,10 @@ class TVMOperatorPad(TVMOperator):
 
         O = te.compute(
             tuple(dims_values),
-            lambda *args: (
-                tvm.tirx.if_then_else(
-                    tvm.tirx.all(*get_args_bounds(*args)),
-                    A[get_indexes(*args)],
-                    constant_value,
-                )
+            lambda *args: tvm.tirx.if_then_else(
+                tvm.tirx.all(*get_args_bounds(*args)),
+                A[get_indexes(*args)],
+                constant_value,
             ),
             name=self.name,
         )

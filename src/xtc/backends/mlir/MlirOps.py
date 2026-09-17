@@ -382,20 +382,23 @@ class MlirOperatorConv2D(MlirOperator):
                 indexing_maps=[
                     AffineMapAttr(
                         AffineMap.from_callable(
-                            lambda b, h, w, f, r, s, c:  # type: ignore
-                            (b, h * SH + r, w * SW + s, c)
+                            lambda b, h, w, f, r, s, c: (  # type: ignore
+                                (b, h * SH + r, w * SW + s, c)
+                            )
                         )
                     ),
                     AffineMapAttr(
                         AffineMap.from_callable(
-                            lambda b, h, w, f, r, s, c:  # type: ignore
-                            (r, s, c, f)
+                            lambda b, h, w, f, r, s, c: (  # type: ignore
+                                (r, s, c, f)
+                            )
                         )
                     ),
                     AffineMapAttr(
                         AffineMap.from_callable(
-                            lambda b, h, w, f, r, s, c:  # type: ignore
-                            (b, h, w, f)
+                            lambda b, h, w, f, r, s, c: (  # type: ignore
+                                (b, h, w, f)
+                            )
                         )
                     ),
                 ],

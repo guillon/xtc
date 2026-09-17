@@ -34,7 +34,7 @@ dependencies = [
     "pyright==1.1.414",
     "types-PyYAML",
     "marimo==0.19.6",
-    "ruff==0.14.10",
+    "ruff==0.16.8",
 ]
 
 [groups.llvm]
