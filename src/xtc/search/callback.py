@@ -31,6 +31,7 @@ class DBCallback(ResultCallBack):
         target: str,
         threads: int,
         strategy: str,
+        backend_kwargs: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self._dbfile = dbfile
         self._target = target
@@ -39,6 +40,7 @@ class DBCallback(ResultCallBack):
         self._platform = ResultsDB.get_native_platform()
         self._operator: list[Any] | None = None
         self._strategy = ResultsDB.get_strategy(strategy)
+        self._backend_kwargs = backend_kwargs if backend_kwargs is not None else {}
 
     def set_graph(self, graph: Graph):
         # assert len(graph.nodes) == 1, f"Only support recording of single node graph"
@@ -49,7 +51,10 @@ class DBCallback(ResultCallBack):
         x, code, time, backend = result
         if code != 0:
             time = 0
-        compiler = ResultsDB.get_compiler(self._target, self._threads, backend)
+        backend_kwargs = self._backend_kwargs.get(backend, {})
+        compiler = ResultsDB.get_compiler(
+            self._target, self._threads, backend, backend_kwargs
+        )
         log = dict(
             version=self._version,
             platform=self._platform,
