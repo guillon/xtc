@@ -95,6 +95,12 @@ def draw_cor(
         ax.set_xlabel(ref_label)
 
 
+def draw_diag(
+    ax: Any,
+):
+    ax.axline((0, 0), slope=1, linestyle="--", color="black", alpha=0.2)
+
+
 def save_fig(fname: str | Path):
     fig = plt.gcf()
     dpi = fig.dpi
@@ -136,8 +142,8 @@ def display_results(results: Sequence[ns], args: ns):
         assert len(results) >= 2
         ref = results[0]
         for res in results[1:]:
-            print("XXX", len(ref.Y), len(res.Y))
             draw_cor(axes.cor, ref.Y, res.Y, ref_label=ref.label, label=res.label)
+        draw_diag(axes.cor)
         axes.cor.legend(loc="upper left")
         axes.cor.set_title("Peak performance correlation")
 
