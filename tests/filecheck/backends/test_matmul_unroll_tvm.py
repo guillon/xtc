@@ -65,6 +65,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  k, __u_k, = sch.split(k, factors=[None, 4])
 # CHECK-NEXT:  sch.reorder(i, j, k, __u_k)
 # CHECK-NEXT:  sch.unroll(__u_k)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T
@@ -76,14 +77,18 @@ print(f"CODE: {res}")
 # CHECK-NEXT:      def matmul(_0: T.Buffer((4, 256), "float32"), _1: T.Buffer((256, 32), "float32"), C: T.Buffer((4, 32), "float32")):
 # CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
 # CHECK-NEXT:          # with T.sblock("root"):
-# CHECK-NEXT:          for i, j, k_0 in T.grid(4, 32, 64):
-# CHECK-NEXT:              for k_1 in T.unroll(4):
-# CHECK-NEXT:                  with T.sblock("C"):
-# CHECK-NEXT:                      v_i, v_j = T.axis.remap("SS", [i, j])
-# CHECK-NEXT:                      v_k = T.axis.reduce(256, k_0 * 4 + k_1)
-# CHECK-NEXT:                      T.reads(_0[v_i, v_k], _1[v_k, v_j])
-# CHECK-NEXT:                      T.writes(C[v_i, v_j])
-# CHECK-NEXT:                      with T.init():
-# CHECK-NEXT:                          C[v_i, v_j] = T.float32(0.0)
-# CHECK-NEXT:                      C[v_i, v_j] = C[v_i, v_j] + _0[v_i, v_k] * _1[v_k, v_j]
+# CHECK-NEXT:          for i, j in T.grid(4, 32):
+# CHECK-NEXT:              with T.sblock("C_init"):
+# CHECK-NEXT:                  v_i, v_j = T.axis.remap("SS", [i, j])
+# CHECK-NEXT:                  T.reads()
+# CHECK-NEXT:                  T.writes(C[v_i, v_j])
+# CHECK-NEXT:                  C[v_i, v_j] = T.float32(0.0)
+# CHECK-NEXT:              for k_0 in range(64):
+# CHECK-NEXT:                  for k_1 in T.unroll(4):
+# CHECK-NEXT:                      with T.sblock("C_update"):
+# CHECK-NEXT:                          v_i, v_j = T.axis.remap("SS", [i, j])
+# CHECK-NEXT:                          v_k = T.axis.reduce(256, k_0 * 4 + k_1)
+# CHECK-NEXT:                          T.reads(C[v_i, v_j], _0[v_i, v_k], _1[v_k, v_j])
+# CHECK-NEXT:                          T.writes(C[v_i, v_j])
+# CHECK-NEXT:                          C[v_i, v_j] = C[v_i, v_j] + _0[v_i, v_k] * _1[v_k, v_j]
 # CHECK-NEXT:  CODE: 0

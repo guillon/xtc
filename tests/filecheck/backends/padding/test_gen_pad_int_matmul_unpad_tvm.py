@@ -86,6 +86,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  O = sch.get_sblock("matmul_padded")
 # CHECK-NEXT:  i, j, k, = sch.get_loops(O)
 # CHECK-NEXT:  sch.reorder(i, j, k)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T
@@ -112,14 +113,18 @@ print(f"CODE: {res}")
 # CHECK-NEXT:                  T.reads(_1[v_i0 - 2, v_i1 - 2])
 # CHECK-NEXT:                  T.writes(B_pad[v_i0, v_i1])
 # CHECK-NEXT:                  B_pad[v_i0, v_i1] = T.if_then_else(2 <= v_i0 and v_i0 < 16 and 2 <= v_i1 and v_i1 < 16, _1[v_i0 - 2, v_i1 - 2], T.float32(0.0))
-# CHECK-NEXT:          for i, j, k in T.grid(18, 18, 18):
-# CHECK-NEXT:              with T.sblock("matmul_padded"):
-# CHECK-NEXT:                  v_i, v_j, v_k = T.axis.remap("SSR", [i, j, k])
-# CHECK-NEXT:                  T.reads(A_pad[v_i, v_k], B_pad[v_k, v_j])
+# CHECK-NEXT:          for i, j in T.grid(18, 18):
+# CHECK-NEXT:              with T.sblock("matmul_padded_init"):
+# CHECK-NEXT:                  v_i, v_j = T.axis.remap("SS", [i, j])
+# CHECK-NEXT:                  T.reads()
 # CHECK-NEXT:                  T.writes(matmul_padded[v_i, v_j])
-# CHECK-NEXT:                  with T.init():
-# CHECK-NEXT:                      matmul_padded[v_i, v_j] = T.float32(0.0)
-# CHECK-NEXT:                  matmul_padded[v_i, v_j] = matmul_padded[v_i, v_j] + A_pad[v_i, v_k] * B_pad[v_k, v_j]
+# CHECK-NEXT:                  matmul_padded[v_i, v_j] = T.float32(0.0)
+# CHECK-NEXT:              for k in range(18):
+# CHECK-NEXT:                  with T.sblock("matmul_padded_update"):
+# CHECK-NEXT:                      v_i, v_j, v_k = T.axis.remap("SSR", [i, j, k])
+# CHECK-NEXT:                      T.reads(matmul_padded[v_i, v_j], A_pad[v_i, v_k], B_pad[v_k, v_j])
+# CHECK-NEXT:                      T.writes(matmul_padded[v_i, v_j])
+# CHECK-NEXT:                      matmul_padded[v_i, v_j] = matmul_padded[v_i, v_j] + A_pad[v_i, v_k] * B_pad[v_k, v_j]
 # CHECK-NEXT:          for i0, i1 in T.grid(14, 14):
 # CHECK-NEXT:              with T.sblock("C"):
 # CHECK-NEXT:                  v_i0, v_i1 = T.axis.remap("SS", [i0, i1])

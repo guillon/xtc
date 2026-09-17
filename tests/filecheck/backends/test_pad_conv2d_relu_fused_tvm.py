@@ -102,6 +102,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  sch.compute_at(I_F0, r)
 # CHECK-NEXT:  sch.reverse_compute_at(O_F0, w)
 # CHECK-NEXT:  sch.vectorize(f)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T
@@ -118,6 +119,12 @@ print(f"CODE: {res}")
 # CHECK-NEXT:          T_reshape_1 = T.sblock_alloc_buffer((256,))
 # CHECK-NEXT:          relu = T.sblock_alloc_buffer((256,))
 # CHECK-NEXT:          for b, h, w in T.grid(1, 4, 4):
+# CHECK-NEXT:              for f_init in T.vectorized(16):
+# CHECK-NEXT:                  with T.sblock("conv_init"):
+# CHECK-NEXT:                      v_b, v_h, v_w, v_f = T.axis.remap("SSSS", [b, h, w, f_init])
+# CHECK-NEXT:                      T.reads()
+# CHECK-NEXT:                      T.writes(conv[v_b, v_h, v_w, v_f])
+# CHECK-NEXT:                      conv[v_b, v_h, v_w, v_f] = T.float32(0.0)
 # CHECK-NEXT:              for r in range(5):
 # CHECK-NEXT:                  for ax0, ax1 in T.grid(5, 3):
 # CHECK-NEXT:                      with T.sblock("pad"):
@@ -130,12 +137,10 @@ print(f"CODE: {res}")
 # CHECK-NEXT:                          pad[v_i0, v_i1, v_i2, v_i3] = T.if_then_else(2 <= v_i1 and v_i1 < 10 and 2 <= v_i2 and v_i2 < 10, _0[v_i0, v_i1 - 2, v_i2 - 2, v_i3], T.float32(0.0))
 # CHECK-NEXT:                  for s, c in T.grid(5, 3):
 # CHECK-NEXT:                      for f in T.vectorized(16):
-# CHECK-NEXT:                          with T.sblock("conv"):
+# CHECK-NEXT:                          with T.sblock("conv_update"):
 # CHECK-NEXT:                              v_b, v_h, v_w, v_f, v_r, v_s, v_c = T.axis.remap("SSSSRRR", [b, h, w, f, r, s, c])
-# CHECK-NEXT:                              T.reads(pad[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c], _1[v_r, v_s, v_c, v_f])
+# CHECK-NEXT:                              T.reads(conv[v_b, v_h, v_w, v_f], pad[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c], _1[v_r, v_s, v_c, v_f])
 # CHECK-NEXT:                              T.writes(conv[v_b, v_h, v_w, v_f])
-# CHECK-NEXT:                              with T.init():
-# CHECK-NEXT:                                  conv[v_b, v_h, v_w, v_f] = T.float32(0.0)
 # CHECK-NEXT:                              conv[v_b, v_h, v_w, v_f] = conv[v_b, v_h, v_w, v_f] + pad[v_b, v_h * 2 + v_r, v_w * 2 + v_s, v_c] * _1[v_r, v_s, v_c, v_f]
 # CHECK-NEXT:              for ax0 in range(16):
 # CHECK-NEXT:                  with T.sblock("T_reshape"):

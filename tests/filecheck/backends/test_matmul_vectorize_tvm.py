@@ -68,6 +68,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  sch.reorder(i, j, k, j0, __v_j0)
 # CHECK-NEXT:  sch.unroll(j0)
 # CHECK-NEXT:  sch.vectorize(__v_j0)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T
@@ -79,17 +80,25 @@ print(f"CODE: {res}")
 # CHECK-NEXT:      def matmul(_0: T.Buffer((4, 256), "float32"), _1: T.Buffer((256, 32), "float32"), C: T.Buffer((4, 32), "float32")):
 # CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
 # CHECK-NEXT:          # with T.sblock("root"):
-# CHECK-NEXT:          for i, j_0, k in T.grid(4, 2, 256):
-# CHECK-NEXT:              for j_1 in T.unroll(3):
-# CHECK-NEXT:                  for j_2 in T.vectorized(8):
-# CHECK-NEXT:                      with T.sblock("C"):
+# CHECK-NEXT:          for i, j_0 in T.grid(4, 2):
+# CHECK-NEXT:              for j_1_init in T.unroll(3):
+# CHECK-NEXT:                  for j_2_init in T.vectorized(8):
+# CHECK-NEXT:                      with T.sblock("C_init"):
 # CHECK-NEXT:                          v_i = T.axis.spatial(4, i)
-# CHECK-NEXT:                          v_j = T.axis.spatial(32, j_0 * 24 + j_1 * 8 + j_2)
-# CHECK-NEXT:                          v_k = T.axis.reduce(256, k)
-# CHECK-NEXT:                          T.where((j_0 * 3 + j_1) * 8 + j_2 < 32)
-# CHECK-NEXT:                          T.reads(_0[v_i, v_k], _1[v_k, v_j])
+# CHECK-NEXT:                          v_j = T.axis.spatial(32, j_0 * 24 + j_1_init * 8 + j_2_init)
+# CHECK-NEXT:                          T.where((j_0 * 3 + j_1_init) * 8 + j_2_init < 32)
+# CHECK-NEXT:                          T.reads()
 # CHECK-NEXT:                          T.writes(C[v_i, v_j])
-# CHECK-NEXT:                          with T.init():
-# CHECK-NEXT:                              C[v_i, v_j] = T.float32(0.0)
-# CHECK-NEXT:                          C[v_i, v_j] = C[v_i, v_j] + _0[v_i, v_k] * _1[v_k, v_j]
+# CHECK-NEXT:                          C[v_i, v_j] = T.float32(0.0)
+# CHECK-NEXT:              for k in range(256):
+# CHECK-NEXT:                  for j_1 in T.unroll(3):
+# CHECK-NEXT:                      for j_2 in T.vectorized(8):
+# CHECK-NEXT:                          with T.sblock("C_update"):
+# CHECK-NEXT:                              v_i = T.axis.spatial(4, i)
+# CHECK-NEXT:                              v_j = T.axis.spatial(32, j_0 * 24 + j_1 * 8 + j_2)
+# CHECK-NEXT:                              v_k = T.axis.reduce(256, k)
+# CHECK-NEXT:                              T.where((j_0 * 3 + j_1) * 8 + j_2 < 32)
+# CHECK-NEXT:                              T.reads(C[v_i, v_j], _0[v_i, v_k], _1[v_k, v_j])
+# CHECK-NEXT:                              T.writes(C[v_i, v_j])
+# CHECK-NEXT:                              C[v_i, v_j] = C[v_i, v_j] + _0[v_i, v_k] * _1[v_k, v_j]
 # CHECK-NEXT:  CODE: 0

@@ -32,6 +32,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sch.vectorize(j3)
 # CHECK-NEXT:  j = sch.fuse(i, j)
 # CHECK-NEXT:  sch.parallel(j)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  schedule O1: [1, 1, 1, 1, 1, 1, 1, 0]
 # CHECK-NEXT:  O = sch.get_sblock("%2")
@@ -45,6 +46,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sch.vectorize(j3)
 # CHECK-NEXT:  j = sch.fuse(i, j)
 # CHECK-NEXT:  sch.parallel(j)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  schedule O2: [1, 1, 1, 1, 1, 16, 1, 1]
 # CHECK-NEXT:  O = sch.get_sblock("%2")
@@ -60,6 +62,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sch.vectorize(j3)
 # CHECK-NEXT:  j = sch.fuse(i, j)
 # CHECK-NEXT:  sch.parallel(j)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  schedule O3: [1, 1, 3, 1, 1, 16, 12, 1]
 # CHECK-NEXT:  O = sch.get_sblock("%2")
@@ -75,6 +78,7 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sch.vectorize(j3)
 # CHECK-NEXT:  j = sch.fuse(i, j)
 # CHECK-NEXT:  sch.parallel(j)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  sample 0: [1, 1, 1, 1, 1, 16, 1, 0]
 # CHECK-NEXT:  sample 1: [1, 1, 1, 1, 1, 16, 1, 1]
@@ -290,3 +294,4 @@ utils.print_exhaustive_samples(backend, strategy, 200)
 # CHECK-NEXT:  sch.vectorize(j3)
 # CHECK-NEXT:  j = sch.fuse(i, j)
 # CHECK-NEXT:  sch.parallel(j)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)

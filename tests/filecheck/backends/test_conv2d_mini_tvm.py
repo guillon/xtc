@@ -61,6 +61,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  O = sch.get_sblock("O")
 # CHECK-NEXT:  b, h, w, f, r, s, c, = sch.get_loops(O)
 # CHECK-NEXT:  sch.reorder(b, h, w, f, r, s, c)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T
@@ -72,12 +73,16 @@ print(f"CODE: {res}")
 # CHECK-NEXT:      def conv2d_nhwc_mini(_0: T.Buffer((1, 10, 10, 3), "float32"), _1: T.Buffer((3, 3, 3, 16), "float32"), O: T.Buffer((1, 8, 8, 16), "float32")):
 # CHECK-NEXT:          T.func_attr({"tirx.noalias": True})
 # CHECK-NEXT:          # with T.sblock("root"):
-# CHECK-NEXT:          for b, h, w, f, r, s, c in T.grid(1, 8, 8, 16, 3, 3, 3):
-# CHECK-NEXT:              with T.sblock("O"):
-# CHECK-NEXT:                  v_b, v_h, v_w, v_f, v_r, v_s, v_c = T.axis.remap("SSSSRRR", [b, h, w, f, r, s, c])
-# CHECK-NEXT:                  T.reads(_0[v_b, v_h + v_r, v_w + v_s, v_c], _1[v_r, v_s, v_c, v_f])
+# CHECK-NEXT:          for b, h, w, f in T.grid(1, 8, 8, 16):
+# CHECK-NEXT:              with T.sblock("O_init"):
+# CHECK-NEXT:                  v_b, v_h, v_w, v_f = T.axis.remap("SSSS", [b, h, w, f])
+# CHECK-NEXT:                  T.reads()
 # CHECK-NEXT:                  T.writes(O[v_b, v_h, v_w, v_f])
-# CHECK-NEXT:                  with T.init():
-# CHECK-NEXT:                      O[v_b, v_h, v_w, v_f] = T.float32(0.0)
-# CHECK-NEXT:                  O[v_b, v_h, v_w, v_f] = O[v_b, v_h, v_w, v_f] + _0[v_b, v_h + v_r, v_w + v_s, v_c] * _1[v_r, v_s, v_c, v_f]
+# CHECK-NEXT:                  O[v_b, v_h, v_w, v_f] = T.float32(0.0)
+# CHECK-NEXT:              for r, s, c in T.grid(3, 3, 3):
+# CHECK-NEXT:                  with T.sblock("O_update"):
+# CHECK-NEXT:                      v_b, v_h, v_w, v_f, v_r, v_s, v_c = T.axis.remap("SSSSRRR", [b, h, w, f, r, s, c])
+# CHECK-NEXT:                      T.reads(O[v_b, v_h, v_w, v_f], _0[v_b, v_h + v_r, v_w + v_s, v_c], _1[v_r, v_s, v_c, v_f])
+# CHECK-NEXT:                      T.writes(O[v_b, v_h, v_w, v_f])
+# CHECK-NEXT:                      O[v_b, v_h, v_w, v_f] = O[v_b, v_h, v_w, v_f] + _0[v_b, v_h + v_r, v_w + v_s, v_c] * _1[v_r, v_s, v_c, v_f]
 # CHECK-NEXT:  CODE: 0

@@ -79,6 +79,7 @@ print(f"CODE: {res}")
 # CHECK-NEXT:  sch.storage_align(I_R1, 0,  axis=-2, factor=1024, offset=16)
 # CHECK-NEXT:  sch.unroll(i2)
 # CHECK-NEXT:  sch.vectorize(j2)
+# CHECK-NEXT:  sch = decompose_reduction_initializers(sch)
 # CHECK-NEXT:  
 # CHECK-NEXT:  # from tvm.script import ir as I
 # CHECK-NEXT:  # from tvm.script import tirx as T
@@ -93,6 +94,15 @@ print(f"CODE: {res}")
 # CHECK-NEXT:          _1_global = T.sblock_alloc_buffer((64, 64))
 # CHECK-NEXT:          C_global = T.sblock_alloc_buffer((64, 64))
 # CHECK-NEXT:          for j_0 in range(2):
+# CHECK-NEXT:              for i_0_init, j_1_init, i_1_init in T.grid(8, 2, 2):
+# CHECK-NEXT:                  for i_2_init in T.unroll(4):
+# CHECK-NEXT:                      for j_2_init in T.vectorized(16):
+# CHECK-NEXT:                          with T.sblock("C_init"):
+# CHECK-NEXT:                              v_i = T.axis.spatial(64, i_0_init * 8 + i_1_init * 4 + i_2_init)
+# CHECK-NEXT:                              v_j = T.axis.spatial(64, j_0 * 32 + j_1_init * 16 + j_2_init)
+# CHECK-NEXT:                              T.reads()
+# CHECK-NEXT:                              T.writes(C_global[v_i, v_j])
+# CHECK-NEXT:                              C_global[v_i, v_j] = T.float32(0.0)
 # CHECK-NEXT:              for k_0 in range(4):
 # CHECK-NEXT:                  for ax0, ax1 in T.grid(16, 32):
 # CHECK-NEXT:                      with T.sblock("_1_global"):
@@ -105,14 +115,12 @@ print(f"CODE: {res}")
 # CHECK-NEXT:                  for i_0, j_1, i_1, k_1 in T.grid(8, 2, 2, 16):
 # CHECK-NEXT:                      for i_2 in T.unroll(4):
 # CHECK-NEXT:                          for j_2 in T.vectorized(16):
-# CHECK-NEXT:                              with T.sblock("C"):
+# CHECK-NEXT:                              with T.sblock("C_update"):
 # CHECK-NEXT:                                  v_i = T.axis.spatial(64, i_0 * 8 + i_1 * 4 + i_2)
 # CHECK-NEXT:                                  v_j = T.axis.spatial(64, j_0 * 32 + j_1 * 16 + j_2)
 # CHECK-NEXT:                                  v_k = T.axis.reduce(64, k_0 * 16 + k_1)
-# CHECK-NEXT:                                  T.reads(_0[v_i, v_k], _1_global[v_k, v_j])
+# CHECK-NEXT:                                  T.reads(C_global[v_i, v_j], _0[v_i, v_k], _1_global[v_k, v_j])
 # CHECK-NEXT:                                  T.writes(C_global[v_i, v_j])
-# CHECK-NEXT:                                  with T.init():
-# CHECK-NEXT:                                      C_global[v_i, v_j] = T.float32(0.0)
 # CHECK-NEXT:                                  C_global[v_i, v_j] = C_global[v_i, v_j] + _0[v_i, v_k] * _1_global[v_k, v_j]
 # CHECK-NEXT:              for ax0, ax1 in T.grid(64, 32):
 # CHECK-NEXT:                  with T.sblock("C_global"):
