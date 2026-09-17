@@ -113,6 +113,7 @@ class ExplorationConfig:
     use_tensors: bool = False
     progress_cls: str = "tqdm"
     module_type: str = "shlib"
+    backend_kwargs: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def __post_init__(self):
         if self.graph_file is not None:
@@ -132,6 +133,13 @@ class ExplorationConfig:
                 assert backend in cast(list, OPERATORS[self.operator]["backends"]), (
                     f"backend {backend} not available for operator {self.operator}"
                 )
+
+        for backend in self.backends:
+            if backend not in self.backend_kwargs:
+                self.backend_kwargs[backend] = {}
+
+        if self.use_tensors:
+            self.backend_kwargs["mlir"].update({"use_tensor_dialect": True})
 
     @staticmethod
     def from_args(
@@ -352,13 +360,10 @@ class Exploration:
         args = self.config
         assert isinstance(in_x, list), f"X not a list: {in_x} ({type(in_x)})"
         logger.debug("Compile: %s: %s: %s...", ident, backend, in_x)
-        kwargs = {}
-        if backend == "mlir":
-            kwargs.update({"use_tensor_dialect": args.use_tensors})
         impl, backend_name = self.graph_implementer(
             graph,
             backend,
-            **kwargs,
+            **args.backend_kwargs.get(backend, {}),
         )
         assert backend_name == backend
         scheduler = impl.get_scheduler()
@@ -714,6 +719,7 @@ class Exploration:
                 "native",
                 args.threads,
                 self.get_strategy_name(args.strategy),
+                args.backend_kwargs,
             )
             args.db_callback.set_graph(graph)
             callbacks.append(args.db_callback)

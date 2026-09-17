@@ -23,7 +23,7 @@ DBEntry: TypeAlias = dict[str, Any]
 
 
 class ResultsDB(ABC):
-    VERSION = "v0.2"
+    VERSION = "v0.3"
 
     def __init__(
         self,
@@ -49,6 +49,7 @@ class ResultsDB(ABC):
         target: str = "native",
         threads: int = 1,
         backend: str | None = None,
+        backend_kwargs: dict[str, Any] | None = None,
     ) -> Generator[DBEntry, None, None]:
         version = self.get_version()
         if self._node_target == "native":
@@ -58,7 +59,7 @@ class ResultsDB(ABC):
                 f"node must be specified for non native target"
             )
             platform = self.get_node_platform(self._node, self._node_target)
-        compiler = self.get_compiler(target, threads, backend)
+        compiler = self.get_compiler(target, threads, backend, backend_kwargs)
         operator = self.get_operator(graph)
         logger.debug("MATCH: version: %s", version)
         logger.debug("MATCH: platform: %s", platform)
@@ -84,11 +85,17 @@ class ResultsDB(ABC):
 
     @classmethod
     def get_compiler(
-        cls, target: str = "native", threads: int = 1, backend: str | None = None
+        cls,
+        target: str = "native",
+        threads: int = 1,
+        backend: str | None = None,
+        backend_kwargs: dict[str, Any] | None = None,
     ) -> list[Any]:
         compiler = ["xtc", cls.get_xtc_version(), target, threads]
         if backend is not None:
             compiler.append(backend)
+            if backend_kwargs is not None:
+                compiler.append(backend_kwargs)
         return compiler
 
     @classmethod
@@ -128,6 +135,7 @@ class ResultsDB(ABC):
         target: str = "native",
         threads: int = 1,
         backend: str | None = None,
+        backend_kwargs: dict[str, Any] | None = None,
         allow_errors: bool = False,
     ) -> list[DBEntry]:
         results = []
@@ -137,6 +145,7 @@ class ResultsDB(ABC):
             target=target,
             threads=threads,
             backend=backend,
+            backend_kwargs=backend_kwargs,
         ):
             if not allow_errors and log["results"][0] != 0:
                 continue
@@ -149,12 +158,14 @@ class ResultsDB(ABC):
         target: str = "native",
         threads: int = 1,
         backend: str | None = None,
+        backend_kwargs: dict[str, Any] | None = None,
     ) -> DBEntry | None:
         logs = self.get_results(
             graph,
             target,
             threads,
             backend,
+            backend_kwargs,
             allow_errors=False,
         )
         ordered = sorted(logs, key=lambda x: min(x["results"][1]))
