@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2024-2026 The XTC Project Authors
 #
+import subprocess
+
 from typing_extensions import override
 
 from xtc.utils.host_tools import target_triple
@@ -81,15 +83,32 @@ class MlirLLVMTarget(MlirCpuTarget):
         )
 
     @property
+    def _native_target_triple(self) -> str | None:
+        # llc's implicit default triple isn't reliable across installs;
+        # ask the install directly instead.
+        cached = getattr(self, "_native_target_triple_cache", None)
+        if cached is not None:
+            return cached or None
+        llvm_config = f"{self._config.llvm_install_dir}/bin/llvm-config"
+        try:
+            result = self.execute_command(cmd=[llvm_config, "--host-target"])
+            triple = result.stdout.strip() if result.returncode == 0 else ""
+        except (OSError, subprocess.SubprocessError):
+            triple = ""
+        self._native_target_triple_cache = triple
+        return triple or None
+
+    @property
     def cmd_llc(self):
         llc = [f"{self._config.llvm_install_dir}/bin/llc"]
         if self._config.arch == "native":
             llc_arch = [f"--mcpu={self._config.cpu}"]
+            triple = self._native_target_triple
         else:
             llc_arch = [f"-march={self._config.arch}", f"--mcpu={self._config.cpu}"]
             triple = target_triple(self._config.arch)
-            if triple:
-                llc_arch += [f"--mtriple={triple}"]
+        if triple:
+            llc_arch += [f"--mtriple={triple}"]
         return llc + llc_opts + llc_arch
 
     @property
